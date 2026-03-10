@@ -3,11 +3,14 @@
 # SGE — Instalador de Producción
 # Uso: bash install.sh
 # Requisitos: Debian 13, usuario con sudo
+#
+# Privilegios:
+#   [SISTEMA]  → sudo  — paquetes globales, servicios del SO, usuarios
+#   [APP]      → sudo -u sge — configuración, binarios y datos de la aplicación
 # ============================================================================
 set -euo pipefail
 
 SGE_REPO="terracenter/sge"
-DEPLOY_REPO="terracenter/sge-deploy"
 GO_VERSION="1.26.1"
 MIGRATE_VERSION="4.19.1"
 TRAEFIK_VERSION="3.6.10"
@@ -20,12 +23,15 @@ info()    { echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 section() { echo -e "\n${BOLD}${BLUE}══ $* ══${NC}"; }
+step_sys() { echo -e "  ${YELLOW}[SISTEMA]${NC} $*"; }
+step_app() { echo -e "  ${GREEN}[APP]${NC}    $*"; }
 
 # ── Verificaciones previas ────────────────────────────────────────────────────
 [[ $EUID -eq 0 ]] && error "No ejecutar como root. Usar usuario con sudo."
 command -v sudo &>/dev/null || error "sudo no está instalado."
 . /etc/os-release
-[[ "$ID" == "debian" && "$VERSION_ID" == "13" ]] || warn "Este instalador fue probado en Debian 13. Continuar bajo tu responsabilidad."
+[[ "$ID" == "debian" && "$VERSION_ID" == "13" ]] || \
+    warn "Probado en Debian 13. Continuar bajo tu responsabilidad."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -43,12 +49,9 @@ echo ""
 # ── Detectar CPU level ────────────────────────────────────────────────────────
 section "Detección de CPU"
 detect_cpu_level() {
-    if grep -q "avx512f" /proc/cpuinfo 2>/dev/null; then
-        echo "v4"
-    elif grep -q "avx2" /proc/cpuinfo 2>/dev/null; then
-        echo "v3"
-    else
-        echo "v2"
+    if grep -q "avx512f" /proc/cpuinfo 2>/dev/null; then echo "v4"
+    elif grep -q "avx2"   /proc/cpuinfo 2>/dev/null; then echo "v3"
+    else echo "v2"
     fi
 }
 CPU_LEVEL=$(detect_cpu_level)
@@ -67,15 +70,16 @@ read -rp "$(echo -e ${BOLD})GitHub token (lectura de releases privados): $(echo 
 echo ""
 [[ -z "$GH_TOKEN" ]] && error "El token de GitHub es obligatorio."
 
-# Generar contraseñas automáticamente
+# Generar contraseñas automáticamente (hex — sin caracteres especiales)
 DB_PASSWORD=$(openssl rand -hex 32)
 REDIS_PASSWORD=$(openssl rand -hex 32)
-info "Contraseñas generadas automáticamente (hex, sin caracteres especiales)."
+info "Contraseñas generadas automáticamente."
 
 # Obtener última versión disponible
 SGE_VERSION=$(curl -sf -H "Authorization: token $GH_TOKEN" \
     "https://api.github.com/repos/${SGE_REPO}/releases/latest" \
-    | grep '"tag_name"' | cut -d'"' -f4) || error "No se pudo obtener la versión de GitHub. Verificar token."
+    | grep '"tag_name"' | cut -d'"' -f4) || \
+    error "No se pudo obtener la versión de GitHub. Verificar token."
 info "Versión a instalar: ${SGE_VERSION}"
 
 echo ""
@@ -88,94 +92,111 @@ echo ""
 read -rp "¿Continuar? [s/N]: " CONFIRM
 [[ "${CONFIRM,,}" != "s" ]] && exit 0
 
-# ── 1. Paquetes del sistema ───────────────────────────────────────────────────
-section "1/9 Instalando paquetes del sistema"
+# ============================================================================
+# FASE 1 — SISTEMA
+# Requiere sudo. Instala paquetes del SO, crea usuarios y estructura de dirs.
+# ============================================================================
+
+section "FASE 1/2 — Sistema (sudo)"
+
+# ── 1.1 Paquetes del sistema ──────────────────────────────────────────────────
+step_sys "Actualizando sistema e instalando paquetes base..."
 sudo apt-get update -qq && sudo apt-get upgrade -y -qq
 sudo apt-get install -y -qq \
     curl wget git ufw fail2ban logrotate unzip rsync \
-    ca-certificates gnupg postgresql postgresql-client \
-    pgbouncer redis-server
+    ca-certificates gnupg redis-server pgbouncer
 
-# PostgreSQL 18 desde repo oficial
+# ── 1.2 PostgreSQL 18 ─────────────────────────────────────────────────────────
+step_sys "Configurando repositorio PostgreSQL 18..."
 if ! psql --version 2>/dev/null | grep -q "18\."; then
-    info "Instalando PostgreSQL 18..."
     sudo install -d /usr/share/postgresql-common/pgdg
     sudo curl -qo /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
         https://www.postgresql.org/media/keys/ACCC4CF8.asc
-    . /etc/os-release
-    echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
-https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
-        | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+    echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
     sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-18 postgresql-client-18
 fi
+info "PostgreSQL: $(psql --version)"
 
-# Node.js 24 LTS (system-wide)
-if ! node --version 2>/dev/null | grep -q "^v24"; then
-    info "Instalando Node.js ${NODE_VERSION} LTS..."
+# ── 1.3 Node.js 24 LTS (global) ───────────────────────────────────────────────
+step_sys "Instalando Node.js ${NODE_VERSION} LTS (global)..."
+if ! node --version 2>/dev/null | grep -q "^v${NODE_VERSION}"; then
     curl -fsSL "https://deb.nodesource.com/setup_${NODE_VERSION}.x" | sudo -E bash - > /dev/null
     sudo apt-get install -y -qq nodejs
 fi
+info "Node.js: $(node --version)"
 
-# ── 2. Golang-migrate ─────────────────────────────────────────────────────────
-section "2/9 Instalando golang-migrate"
+# ── 1.4 golang-migrate (global) ───────────────────────────────────────────────
+step_sys "Instalando golang-migrate ${MIGRATE_VERSION} (global)..."
 if ! migrate -version 2>/dev/null | grep -q "${MIGRATE_VERSION}"; then
     wget -q "https://github.com/golang-migrate/migrate/releases/download/v${MIGRATE_VERSION}/migrate.linux-amd64.tar.gz" -O /tmp/migrate.tar.gz
-    tar xzf /tmp/migrate.tar.gz -C /tmp && sudo mv /tmp/migrate /usr/local/bin/migrate
-    sudo chmod +x /usr/local/bin/migrate && rm /tmp/migrate.tar.gz
+    tar xzf /tmp/migrate.tar.gz -C /tmp
+    sudo mv /tmp/migrate /usr/local/bin/migrate
+    sudo chmod +x /usr/local/bin/migrate
+    rm -f /tmp/migrate.tar.gz
 fi
-info "migrate $(migrate -version)"
+info "migrate: $(migrate -version)"
 
-# ── 3. Traefik ────────────────────────────────────────────────────────────────
-section "3/9 Instalando Traefik"
+# ── 1.5 Traefik (global) ──────────────────────────────────────────────────────
+step_sys "Instalando Traefik ${TRAEFIK_VERSION} (global)..."
 if ! traefik version 2>/dev/null | grep -q "${TRAEFIK_VERSION}"; then
     wget -q "https://github.com/traefik/traefik/releases/download/v${TRAEFIK_VERSION}/traefik_v${TRAEFIK_VERSION}_linux_amd64.tar.gz" -O /tmp/traefik.tar.gz
-    tar xzf /tmp/traefik.tar.gz -C /tmp && sudo mv /tmp/traefik /usr/local/bin/traefik
-    sudo chmod +x /usr/local/bin/traefik && rm /tmp/traefik.tar.gz
+    tar xzf /tmp/traefik.tar.gz -C /tmp
+    sudo mv /tmp/traefik /usr/local/bin/traefik
+    sudo chmod +x /usr/local/bin/traefik
+    rm -f /tmp/traefik.tar.gz
 fi
-info "Traefik $(traefik version | head -1)"
+info "Traefik: $(traefik version 2>&1 | head -1)"
 
-# ── 4. Usuarios y estructura FHS ─────────────────────────────────────────────
-section "4/9 Usuarios y estructura FHS"
+# ── 1.6 Usuario sge (sistema, sin shell) ──────────────────────────────────────
+step_sys "Creando usuario sge (sin shell)..."
 if ! id sge &>/dev/null; then
-    sudo useradd --system --shell /usr/sbin/nologin --home-dir /opt/sge sge
+    sudo useradd --system --shell /usr/sbin/nologin --home-dir /opt/sge --create-home sge
 fi
+
+# ── 1.7 Usuario sge-runner (CI/CD, con shell) ─────────────────────────────────
+step_sys "Creando usuario sge-runner (CI/CD)..."
 if ! id sge-runner &>/dev/null; then
     sudo useradd --system --shell /bin/bash --create-home --home-dir /opt/sge-runner sge-runner
 fi
 
-# Sudoers
+# Sudoers: permisos mínimos por rol
 echo 'sge ALL=(ALL) NOPASSWD: /bin/systemctl restart sge, /bin/systemctl restart sge-frontend' \
     | sudo tee /etc/sudoers.d/sge-services > /dev/null
 echo 'sge-runner ALL=(ALL) NOPASSWD: /bin/systemctl restart sge, /bin/systemctl restart sge-frontend, /usr/local/bin/migrate' \
     | sudo tee /etc/sudoers.d/sge-runner > /dev/null
 sudo chmod 440 /etc/sudoers.d/sge-services /etc/sudoers.d/sge-runner
 
-# Estructura FHS
-sudo mkdir -p /etc/sge/{keys,traefik/dynamic} /opt/sge/{bin,frontend} \
-    /var/log/sge /var/lib/sge/{backups,data/redis}
+# ── 1.8 Estructura FHS (crear dirs, transferir propiedad a sge) ───────────────
+step_sys "Creando estructura FHS /etc/sge /opt/sge /var/log/sge /var/lib/sge..."
+sudo mkdir -p /etc/sge/keys /etc/sge/traefik/dynamic \
+              /opt/sge/bin /opt/sge/frontend \
+              /var/log/sge \
+              /var/lib/sge/backups /var/lib/sge/data/redis
 sudo touch /etc/sge/traefik/acme.json
-sudo chmod 600 /etc/sge/traefik/acme.json && sudo chmod 700 /etc/sge/keys
+sudo chmod 600 /etc/sge/traefik/acme.json
+sudo chmod 700 /etc/sge/keys
+# Entregar propiedad al usuario sge — desde aquí en adelante escribe sge, no root
 sudo chown -R sge:sge /etc/sge /opt/sge /var/log/sge /var/lib/sge
-info "Estructura FHS creada."
+info "Estructura FHS lista."
 
-# ── 5. Configurar servicios ───────────────────────────────────────────────────
-section "5/9 Configurando PostgreSQL, Redis, PgBouncer"
-
-# PostgreSQL
+# ── 1.9 PostgreSQL: usuario y base de datos ───────────────────────────────────
+step_sys "Configurando usuario/base de datos en PostgreSQL..."
 sudo -u postgres psql -c "CREATE USER sge WITH PASSWORD '$DB_PASSWORD';" 2>/dev/null || \
     sudo -u postgres psql -c "ALTER USER sge WITH PASSWORD '$DB_PASSWORD';"
 sudo -u postgres psql -c "CREATE DATABASE sge_platform OWNER sge;" 2>/dev/null || true
 sudo -u postgres psql -c "ALTER SYSTEM SET listen_addresses = 'localhost';"
 sudo systemctl restart postgresql
 
-# Redis
-echo "bind 127.0.0.1"            | sudo tee -a /etc/redis/redis.conf > /dev/null
-echo "requirepass $REDIS_PASSWORD" | sudo tee -a /etc/redis/redis.conf > /dev/null
-echo "maxmemory 512mb"            | sudo tee -a /etc/redis/redis.conf > /dev/null
-echo "maxmemory-policy allkeys-lru" | sudo tee -a /etc/redis/redis.conf > /dev/null
+# ── 1.10 Redis ────────────────────────────────────────────────────────────────
+step_sys "Configurando Redis..."
+# Agregar solo si no existen (idempotente)
+grep -q "^requirepass" /etc/redis/redis.conf 2>/dev/null || \
+    printf 'bind 127.0.0.1\nrequirepass %s\nmaxmemory 512mb\nmaxmemory-policy allkeys-lru\n' \
+        "$REDIS_PASSWORD" | sudo tee -a /etc/redis/redis.conf > /dev/null
 sudo systemctl restart redis-server
 
-# PgBouncer
+# ── 1.11 PgBouncer ───────────────────────────────────────────────────────────
+step_sys "Configurando PgBouncer (puerto 5433, modo transacción)..."
 sudo tee /etc/pgbouncer/pgbouncer.ini > /dev/null << PGCONF
 [databases]
 sge_platform = host=127.0.0.1 port=5432 dbname=sge_platform
@@ -189,48 +210,88 @@ pool_mode         = transaction
 max_client_conn   = 200
 default_pool_size = 20
 PGCONF
-
-echo "\"sge\" \"$DB_PASSWORD\"" | sudo tee /etc/pgbouncer/userlist.txt > /dev/null
-sudo chmod 640 /etc/pgbouncer/userlist.txt && sudo chown postgres:postgres /etc/pgbouncer/userlist.txt
+printf '"%s" "%s"\n' "sge" "$DB_PASSWORD" | sudo tee /etc/pgbouncer/userlist.txt > /dev/null
+sudo chmod 640 /etc/pgbouncer/userlist.txt
+sudo chown postgres:postgres /etc/pgbouncer/userlist.txt
 sudo systemctl restart pgbouncer
-info "PostgreSQL, Redis, PgBouncer configurados."
 
-# ── 6. Descargar binarios desde GitHub Releases ───────────────────────────────
-section "6/9 Descargando SGE ${SGE_VERSION} (amd64-${CPU_LEVEL})"
+# ── 1.12 Seguridad del SO ─────────────────────────────────────────────────────
+step_sys "Aplicando hardening SSH, fail2ban, UFW..."
+sudo cp "$SCRIPT_DIR/deploy/security/10-sshd-settings.conf" /etc/ssh/sshd_config.d/
+[[ -f "$SCRIPT_DIR/deploy/security/banner" ]] && \
+    sudo cp "$SCRIPT_DIR/deploy/security/banner" /etc/ssh/banner
+sudo cp "$SCRIPT_DIR/deploy/security/jail.local" /etc/fail2ban/jail.local
+[[ -d "$SCRIPT_DIR/deploy/security/filter.d" ]] && \
+    sudo cp "$SCRIPT_DIR/deploy/security/filter.d/"* /etc/fail2ban/filter.d/
+sudo sshd -t && sudo systemctl reload sshd
+sudo systemctl restart fail2ban
+info "Hardening aplicado."
 
-download_asset() {
-    local ASSET=$1
-    local DEST=$2
-    curl -sfL \
-        -H "Authorization: token $GH_TOKEN" \
-        -H "Accept: application/octet-stream" \
-        "$(curl -sf -H "Authorization: token $GH_TOKEN" \
-            "https://api.github.com/repos/${SGE_REPO}/releases/latest" \
-            | grep "browser_download_url.*${ASSET}\"" | cut -d'"' -f4)" \
-        -o "$DEST"
+# ── 1.13 Systemd services ────────────────────────────────────────────────────
+step_sys "Instalando units systemd..."
+sudo cp "$SCRIPT_DIR/deploy/sge.service" \
+        "$SCRIPT_DIR/deploy/sge-frontend.service" \
+        "$SCRIPT_DIR/deploy/sge-traefik.service" \
+        /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable sge sge-frontend sge-traefik
+info "Units instaladas."
+
+# ============================================================================
+# FASE 2 — APLICACIÓN
+# Corre como usuario sge (sudo -u sge). Escribe en /etc/sge y /opt/sge.
+# ============================================================================
+
+section "FASE 2/2 — Aplicación (usuario sge)"
+
+# ── 2.1 Descargar binarios desde GitHub Releases ─────────────────────────────
+step_app "Descargando SGE ${SGE_VERSION} amd64-${CPU_LEVEL}..."
+
+_gh_download() {
+    local ASSET=$1 DEST=$2
+    local URL
+    URL=$(curl -sf -H "Authorization: token $GH_TOKEN" \
+        "https://api.github.com/repos/${SGE_REPO}/releases/latest" \
+        | grep "browser_download_url.*${ASSET}\"" | cut -d'"' -f4)
+    [[ -z "$URL" ]] && error "Asset '${ASSET}' no encontrado en el release."
+    curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" "$URL" -o "$DEST"
 }
 
-download_asset "sge-linux-amd64-${CPU_LEVEL}" /tmp/sge
-download_asset "sgectl-linux-amd64-${CPU_LEVEL}" /tmp/sgectl
-download_asset "sge-frontend.tar.gz" /tmp/sge-frontend.tar.gz
-download_asset "sge-migrations.tar.gz" /tmp/sge-migrations.tar.gz
+_gh_download "sge-linux-amd64-${CPU_LEVEL}"   /tmp/sge
+_gh_download "sgectl-linux-amd64-${CPU_LEVEL}" /tmp/sgectl
+_gh_download "sge-frontend.tar.gz"             /tmp/sge-frontend.tar.gz
+_gh_download "sge-migrations.tar.gz"           /tmp/sge-migrations.tar.gz
 
-sudo cp /tmp/sge /opt/sge/bin/sge && sudo cp /tmp/sgectl /opt/sge/bin/sgectl
+# Instalar binarios como usuario sge
+sudo -u sge cp /tmp/sge    /opt/sge/bin/sge
+sudo -u sge cp /tmp/sgectl /opt/sge/bin/sgectl
 sudo chmod +x /opt/sge/bin/sge /opt/sge/bin/sgectl
-sudo chown sge:sge /opt/sge/bin/sge /opt/sge/bin/sgectl
 
-# Frontend
-sudo mkdir -p /opt/sge/frontend
-sudo tar -xzf /tmp/sge-frontend.tar.gz -C /opt/sge/frontend/
-sudo chown -R sge:sge /opt/sge/frontend/
-info "Binarios instalados."
+# Extraer frontend como usuario sge
+sudo -u sge tar -xzf /tmp/sge-frontend.tar.gz -C /opt/sge/frontend/
+info "Binarios instalados en /opt/sge/bin/"
 
-# ── 7. Archivo .env ───────────────────────────────────────────────────────────
-section "7/9 Generando configuración"
-sudo tee /etc/sge/.env > /dev/null << ENV
+# ── 2.2 Generar JWT keys como usuario sge ────────────────────────────────────
+step_app "Generando claves JWT RS256..."
+sudo -u sge /opt/sge/bin/sgectl generate-keys \
+    --private /etc/sge/keys/private.pem \
+    --public  /etc/sge/keys/public.pem
+sudo chmod 600 /etc/sge/keys/private.pem
+sudo chmod 644 /etc/sge/keys/public.pem
+info "Claves JWT generadas en /etc/sge/keys/"
+
+# ── 2.3 Traefik config como usuario sge ──────────────────────────────────────
+step_app "Instalando configuración de Traefik..."
+sed "s/sge.humanbyte.net/${SGE_DOMAIN}/g" "$SCRIPT_DIR/traefik/dynamic/routes.yml" \
+    | sudo -u sge tee /etc/sge/traefik/dynamic/routes.yml > /dev/null
+sudo -u sge cp "$SCRIPT_DIR/traefik/traefik.yml" /etc/sge/traefik/traefik.yml
+
+# ── 2.4 Archivo .env como usuario sge ────────────────────────────────────────
+step_app "Generando /etc/sge/.env..."
+sudo -u sge tee /etc/sge/.env > /dev/null << ENV
 # SGE Production Environment
 # Generado: $(date)
-# Versión: ${SGE_VERSION}
+# Versión:  ${SGE_VERSION}
 
 # Servidor
 SGE_DOMAIN=${SGE_DOMAIN}
@@ -253,56 +314,31 @@ REDIS_PASSWORD=${REDIS_PASSWORD}
 APP_BASE_URL=https://${SGE_DOMAIN}
 APP_NAME=SGE
 
-# JWT (generar llaves con: make generate-keys)
+# JWT
 JWT_PRIVATE_KEY_PATH=/etc/sge/keys/private.pem
 JWT_PUBLIC_KEY_PATH=/etc/sge/keys/public.pem
 ENV
-sudo chmod 600 /etc/sge/.env && sudo chown sge:sge /etc/sge/.env
+sudo chmod 600 /etc/sge/.env
+info "/etc/sge/.env creado (propietario: sge, modo 600)."
 
-# ── 8. Systemd + Traefik ──────────────────────────────────────────────────────
-section "8/9 Instalando services y Traefik"
-
-# Actualizar dominio en routes.yml
-sed -i "s/sge.humanbyte.net/${SGE_DOMAIN}/g" "$SCRIPT_DIR/traefik/dynamic/routes.yml"
-
-sudo cp "$SCRIPT_DIR/deploy/sge.service" \
-        "$SCRIPT_DIR/deploy/sge-frontend.service" \
-        "$SCRIPT_DIR/deploy/sge-traefik.service" \
-        /etc/systemd/system/
-
-sudo cp "$SCRIPT_DIR/traefik/traefik.yml" /etc/sge/traefik/traefik.yml
-sudo cp "$SCRIPT_DIR/traefik/dynamic/routes.yml" /etc/sge/traefik/dynamic/routes.yml
-sudo chown -R sge:sge /etc/sge/traefik/
-
-sudo systemctl daemon-reload
-sudo systemctl enable sge sge-frontend sge-traefik
-info "Services instalados y habilitados."
-
-# ── 8b. Seguridad ─────────────────────────────────────────────────────────────
-sudo cp "$SCRIPT_DIR/deploy/security/10-sshd-settings.conf" /etc/ssh/sshd_config.d/
-sudo cp "$SCRIPT_DIR/deploy/security/banner" /etc/ssh/sshd_config.d/
-sudo cp "$SCRIPT_DIR/deploy/security/jail.local" /etc/fail2ban/jail.local
-sudo cp "$SCRIPT_DIR/deploy/security/filter.d/"* /etc/fail2ban/filter.d/
-sudo sshd -t && sudo systemctl reload sshd
-sudo systemctl restart fail2ban
-info "Seguridad aplicada."
-
-# ── 9. Migraciones y arranque ─────────────────────────────────────────────────
-section "9/9 Migraciones y arranque"
-
+# ── 2.5 Migraciones como usuario sge ─────────────────────────────────────────
+step_app "Ejecutando migraciones de base de datos..."
 tar -xzf /tmp/sge-migrations.tar.gz -C /tmp/
-PGPASSWORD=$DB_PASSWORD migrate \
+sudo -u sge PGPASSWORD="$DB_PASSWORD" migrate \
     -path /tmp/migrations \
     -database "postgres://sge:${DB_PASSWORD}@127.0.0.1:5433/sge_platform?sslmode=disable" \
     up
 rm -rf /tmp/migrations /tmp/sge-migrations.tar.gz /tmp/sge-frontend.tar.gz /tmp/sge /tmp/sgectl
+info "Migraciones completadas."
 
+# ── 2.6 Arrancar servicios (requiere sudo de nuevo) ──────────────────────────
+step_sys "Iniciando servicios (sge-traefik, sge, sge-frontend)..."
 sudo systemctl start sge-traefik sge sge-frontend
 sleep 5
 
 # Health check
 if curl -sf "http://127.0.0.1:8000/api/v1/health" > /dev/null; then
-    info "Health check OK"
+    info "Health check OK ✓"
 else
     warn "Health check falló — revisar: sudo journalctl -u sge -n 50"
 fi
@@ -315,15 +351,15 @@ echo -e "${BOLD}${GREEN}══════════════════�
 echo ""
 echo "  URL:        https://${SGE_DOMAIN}"
 echo "  CPU:        amd64-${CPU_LEVEL}"
-echo "  Config:     /etc/sge/"
-echo "  Binarios:   /opt/sge/bin/"
+echo "  Config:     /etc/sge/          (propietario: sge)"
+echo "  Binarios:   /opt/sge/bin/      (propietario: sge)"
 echo "  Logs:       /var/log/sge/"
 echo "  Backups:    /var/lib/sge/backups/"
 echo ""
 echo -e "${YELLOW}Próximos pasos:${NC}"
-echo "  1. Generar JWT keys: /opt/sge/bin/sgectl generate-keys"
-echo "  2. Activar licencia: https://${SGE_DOMAIN}/settings/licenses"
-echo "  3. Configurar SMTP:  https://${SGE_DOMAIN}/settings"
+echo "  1. Activar licencia:  https://${SGE_DOMAIN}/settings/licenses"
+echo "  2. Configurar SMTP:   https://${SGE_DOMAIN}/settings"
+echo "  3. Cambiar contraseña admin inicial"
 echo ""
 echo -e "${YELLOW}Credenciales guardadas en:${NC} /etc/sge/.env"
-echo -e "${RED}¡IMPORTANTE! Guarda las credenciales en tu gestor de contraseñas.${NC}"
+echo -e "${RED}¡IMPORTANTE! Guarda las credenciales en tu gestor de contraseñas antes de cerrar esta sesión.${NC}"
