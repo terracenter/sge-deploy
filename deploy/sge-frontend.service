@@ -1,0 +1,43 @@
+[Unit]
+Description=SGE — Frontend (Next.js standalone)
+Documentation=https://github.com/terracenter/sge
+After=network.target sge.service
+Wants=sge.service
+
+[Service]
+Type=simple
+User=sge
+Group=sge
+WorkingDirectory=/opt/sge/frontend
+
+# Load environment (FHS: configs en /etc/sge/)
+EnvironmentFile=/etc/sge/.env
+Environment="NODE_ENV=production"
+Environment="PORT=3000"
+Environment="HOSTNAME=127.0.0.1"
+
+# Next.js standalone server
+ExecStart=/usr/bin/node /opt/sge/frontend/server.js
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+StartLimitInterval=60s
+StartLimitBurst=3
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/log/sge /opt/sge/frontend/.next/cache
+
+# Resource limits
+LimitNOFILE=65536
+
+# Logging (FHS: logs en /var/log/sge/)
+StandardOutput=append:/var/log/sge/sge-frontend.log
+StandardError=append:/var/log/sge/sge-frontend-error.log
+
+[Install]
+WantedBy=multi-user.target

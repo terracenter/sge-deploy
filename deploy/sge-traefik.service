@@ -1,0 +1,35 @@
+[Unit]
+Description=SGE — Traefik reverse proxy
+Documentation=https://traefik.io
+After=network.target
+Before=sge.service sge-frontend.service
+
+[Service]
+Type=simple
+User=root
+# Traefik needs root (or CAP_NET_BIND_SERVICE) to bind :80/:443
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+WorkingDirectory=/etc/sge/traefik
+
+ExecStart=/usr/local/bin/traefik --configFile=/etc/sge/traefik/traefik.yml
+ExecReload=/bin/kill -HUP $MAINPID
+
+Restart=on-failure
+RestartSec=5s
+StartLimitInterval=60s
+StartLimitBurst=3
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/etc/sge/traefik /var/log/sge
+
+# Logging (FHS: logs en /var/log/sge/)
+StandardOutput=append:/var/log/sge/traefik-stdout.log
+StandardError=append:/var/log/sge/traefik-error.log
+
+[Install]
+WantedBy=multi-user.target

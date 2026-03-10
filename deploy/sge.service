@@ -1,0 +1,41 @@
+[Unit]
+Description=SGE — Sistema de Gestión Empresarial (backend)
+Documentation=https://github.com/terracenter/sge
+After=network.target postgresql.service redis-server.service pgbouncer.service
+Wants=postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User=sge
+Group=sge
+WorkingDirectory=/opt/sge
+
+# Load environment (FHS: configs en /etc/sge/)
+EnvironmentFile=/etc/sge/.env
+
+# Binary
+ExecStart=/opt/sge/bin/sge
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+StartLimitInterval=60s
+StartLimitBurst=3
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/log/sge /etc/sge
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=512
+
+# Logging (FHS: logs en /var/log/sge/)
+StandardOutput=append:/var/log/sge/sge.log
+StandardError=append:/var/log/sge/sge-error.log
+
+[Install]
+WantedBy=multi-user.target

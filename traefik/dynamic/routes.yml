@@ -1,0 +1,61 @@
+http:
+  # ── Routers ──────────────────────────────────────────────────────────────────
+
+  routers:
+    # /api/* → Go backend (port 8000)
+    backend:
+      rule: "Host(`sge.humanbyte.net`) && PathPrefix(`/api`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers
+      service: backend
+      priority: 10
+
+    # /* → Next.js frontend (port 3000)
+    frontend:
+      rule: "Host(`sge.humanbyte.net`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers
+      service: frontend
+      priority: 1
+
+  # ── Services ─────────────────────────────────────────────────────────────────
+
+  services:
+    backend:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:8000"
+        passHostHeader: true
+
+    frontend:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:3000"
+        passHostHeader: true
+
+  # ── Middlewares ───────────────────────────────────────────────────────────────
+
+  middlewares:
+    security-headers:
+      headers:
+        sslRedirect: true
+        forceSTSHeader: true
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        permissionsPolicy: "camera=(), microphone=(), geolocation=()"
+        customResponseHeaders:
+          X-Frame-Options: "SAMEORIGIN"
+          X-Content-Type-Options: "nosniff"
+          Server: ""

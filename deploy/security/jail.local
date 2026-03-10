@@ -1,0 +1,39 @@
+# ============================================================================
+# Fail2Ban - Configuración SGE Production
+# Instalar en: /etc/fail2ban/jail.local
+# Nivel: Agresivo — baneo permanente para infractores
+# ============================================================================
+
+[DEFAULT]
+# Baneo permanente (requiere limpieza semestral o integración con AbuseIPDB)
+bantime  = -1
+# Ventana de tiempo para contar intentos (10 min)
+findtime = 600
+# Intentos antes de banear
+maxretry = 3
+# Leer logs desde systemd (no archivos planos)
+backend = systemd
+# Nunca banear estas IPs (localhost + red LAN del administrador)
+# IMPORTANTE: Agregar tu IP fija si la tienes
+ignoreip = 127.0.0.1/8 ::1
+
+# ── SSH ──────────────────────────────────────────────────────────────────────
+[sshd]
+enabled = true
+mode    = normal
+
+# ── UFW (Agresivo) ───────────────────────────────────────────────────────────
+# Banea IPs bloqueadas por UFW automáticamente
+[ufw]
+enabled  = true
+filter   = ufw.aggressive
+action   = iptables-allports
+logpath  = /var/log/ufw.log
+
+# ── PostgreSQL ────────────────────────────────────────────────────────────────
+# PgBouncer (:5433) no está expuesto, pero PostgreSQL logs son auditados
+[postgresql]
+enabled  = true
+port     = 5432
+filter   = postgresql-auth
+logpath  = /var/log/postgresql/postgresql-*.log
