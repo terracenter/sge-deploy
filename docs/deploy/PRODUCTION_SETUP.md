@@ -43,7 +43,7 @@ GitHub Actions Self-Hosted Runner (systemd)
 
 | Servicio | Puerto | Acceso | Usuario |
 |---|---|---|---|
-| Traefik | 80, 443 | Público | root (bind) / sge |
+| Traefik | 80, 443 | Público | traefik (CAP_NET_BIND_SERVICE) |
 | Next.js | 3000 | Solo localhost | sge |
 | Go backend | 8000 | Solo localhost | sge |
 | PgBouncer | 5433 | Solo localhost | sge |
@@ -85,7 +85,16 @@ GitHub Actions Self-Hosted Runner (systemd)
 
 ---
 
-## Fase 1 — Prerequisitos en el VPS (implementador: freddy)
+## ⚠️ Fases 1-3 automatizadas
+
+**Las fases 1, 2 y 3 de este documento están completamente automatizadas por `install.sh`.**
+Consultar el README del repositorio para el proceso de instalación.
+
+Este documento es referencia de arquitectura y para troubleshooting.
+
+---
+
+## Fase 1 — Prerequisitos en el VPS (referencia — lo hace install.sh)
 
 El implementador ejecuta esto **una sola vez** en el VPS.
 
@@ -355,7 +364,7 @@ Runner ejecuta:
 cd /opt/sge
 sudo -u sge migrate \
   -path /tmp/sge-migrations \
-  -database "postgres://sge:PASSWORD@localhost:5433/sge_platform?sslmode=disable" \
+  -database "postgres://sge:PASSWORD@localhost:5432/sge_platform?sslmode=disable" \
   up
 
 sudo systemctl start sge-traefik sge sge-frontend
@@ -395,10 +404,10 @@ Solo se cambian IPs en `.env` y configs de PgBouncer/Traefik.
 Backup diario automático a las 2am:
 ```bash
 # /opt/sge/backups/backup.sh (cron del usuario sge)
-pg_dump -U sge -h 127.0.0.1 -p 5433 sge_platform | gzip > backup_$(date +%Y%m%d).sql.gz
+pg_dump -U sge -h 127.0.0.1 -p 5432 sge_platform | gzip > backup_$(date +%Y%m%d).sql.gz
 ```
 
 Restore:
 ```bash
-gunzip -c backup_20260101.sql.gz | psql -U sge -h 127.0.0.1 -p 5433 sge_platform
+gunzip -c backup_20260101.sql.gz | psql -U sge -h 127.0.0.1 -p 5432 sge_platform
 ```
