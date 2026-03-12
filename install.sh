@@ -11,10 +11,9 @@
 set -euo pipefail
 
 SGE_REPO="terracenter/sge"
-GO_VERSION="1.26.1"
 MIGRATE_VERSION="4.19.1"
 TRAEFIK_VERSION="3.6.10"
-NODE_VERSION="24"
+NODE_VERSION="22"
 
 # ── Colores ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -153,7 +152,15 @@ if ! id sge &>/dev/null; then
     sudo useradd --system --shell /usr/sbin/nologin --home-dir /opt/sge --create-home sge
 fi
 
-# ── 1.7 Usuario sge-runner (CI/CD, con shell) ─────────────────────────────────
+# ── 1.7 Usuario traefik (sin shell, solo para el proceso Traefik) ─────────────
+step_sys "Creando usuario traefik (sin shell)..."
+if ! id traefik &>/dev/null; then
+    sudo useradd --system --shell /usr/sbin/nologin --no-create-home traefik
+fi
+# traefik necesita escribir acme.json → pertenece al grupo sge para logs compartidos
+sudo usermod -aG sge traefik
+
+# ── 1.8 Usuario sge-runner (CI/CD, con shell) ─────────────────────────────────
 step_sys "Creando usuario sge-runner (CI/CD)..."
 if ! id sge-runner &>/dev/null; then
     sudo useradd --system --shell /bin/bash --create-home --home-dir /opt/sge-runner sge-runner
@@ -166,7 +173,7 @@ echo 'sge-runner ALL=(ALL) NOPASSWD: /bin/systemctl restart sge, /bin/systemctl 
     | sudo tee /etc/sudoers.d/sge-runner > /dev/null
 sudo chmod 440 /etc/sudoers.d/sge-services /etc/sudoers.d/sge-runner
 
-# ── 1.8 Estructura FHS (crear dirs, transferir propiedad a sge) ───────────────
+# ── 1.8 Estructura FHS (crear dirs, asignar propiedad por rol) ────────────────
 step_sys "Creando estructura FHS /etc/sge /opt/sge /var/log/sge /var/lib/sge..."
 sudo mkdir -p /etc/sge/keys /etc/sge/traefik/dynamic \
               /opt/sge/bin /opt/sge/frontend \
@@ -175,11 +182,27 @@ sudo mkdir -p /etc/sge/keys /etc/sge/traefik/dynamic \
 sudo touch /etc/sge/traefik/acme.json
 sudo chmod 600 /etc/sge/traefik/acme.json
 sudo chmod 700 /etc/sge/keys
-# Entregar propiedad al usuario sge — desde aquí en adelante escribe sge, no root
-sudo chown -R sge:sge /etc/sge /opt/sge /var/log/sge /var/lib/sge
+# sge: config general, binarios, datos
+sudo chown -R sge:sge /etc/sge /opt/sge /var/lib/sge
+# traefik: su propio directorio de configuración (escribe acme.json)
+sudo chown -R traefik:traefik /etc/sge/traefik
+# /var/log/sge: grupo sge, setgid → sge y traefik escriben aquí
+sudo chown -R sge:sge /var/log/sge
+sudo chmod 2775 /var/log/sge
 info "Estructura FHS lista."
 
-# ── 1.9 PostgreSQL: usuario y base de datos ───────────────────────────────────
+# ── 1.9 UFW — firewall (permitir solo 22, 80, 443) ───────────────────────────
+step_sys "Configurando UFW (22/tcp, 80/tcp, 443/tcp)..."
+sudo ufw --force reset
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw --force enable
+info "UFW habilitado: $(sudo ufw status | head -1)"
+
+# ── 1.10 PostgreSQL: usuario y base de datos ──────────────────────────────────
 step_sys "Configurando usuario/base de datos en PostgreSQL..."
 sudo -u postgres psql -c "CREATE USER sge WITH PASSWORD '$DB_PASSWORD';" 2>/dev/null || \
     sudo -u postgres psql -c "ALTER USER sge WITH PASSWORD '$DB_PASSWORD';"
@@ -187,7 +210,7 @@ sudo -u postgres psql -c "CREATE DATABASE sge_platform OWNER sge;" 2>/dev/null |
 sudo -u postgres psql -c "ALTER SYSTEM SET listen_addresses = 'localhost';"
 sudo systemctl restart postgresql
 
-# ── 1.10 Redis ────────────────────────────────────────────────────────────────
+# ── 1.11 Redis ────────────────────────────────────────────────────────────────
 step_sys "Configurando Redis..."
 # Agregar solo si no existen (idempotente)
 grep -q "^requirepass" /etc/redis/redis.conf 2>/dev/null || \
@@ -195,7 +218,7 @@ grep -q "^requirepass" /etc/redis/redis.conf 2>/dev/null || \
         "$REDIS_PASSWORD" | sudo tee -a /etc/redis/redis.conf > /dev/null
 sudo systemctl restart redis-server
 
-# ── 1.11 PgBouncer ───────────────────────────────────────────────────────────
+# ── 1.12 PgBouncer ───────────────────────────────────────────────────────────
 step_sys "Configurando PgBouncer (puerto 5433, modo transacción)..."
 sudo tee /etc/pgbouncer/pgbouncer.ini > /dev/null << PGCONF
 [databases]
@@ -204,18 +227,20 @@ sge_platform = host=127.0.0.1 port=5432 dbname=sge_platform
 [pgbouncer]
 listen_addr       = 127.0.0.1
 listen_port       = 5433
-auth_type         = scram-sha-256
+auth_type         = md5
 auth_file         = /etc/pgbouncer/userlist.txt
 pool_mode         = transaction
 max_client_conn   = 200
 default_pool_size = 20
 PGCONF
-printf '"%s" "%s"\n' "sge" "$DB_PASSWORD" | sudo tee /etc/pgbouncer/userlist.txt > /dev/null
+# md5 userlist format: "user" "md5<md5(password+username)>"
+PGB_MD5_HASH=$(printf '%s%s' "$DB_PASSWORD" "sge" | md5sum | cut -d' ' -f1)
+printf '"%s" "md5%s"\n' "sge" "$PGB_MD5_HASH" | sudo tee /etc/pgbouncer/userlist.txt > /dev/null
 sudo chmod 640 /etc/pgbouncer/userlist.txt
 sudo chown postgres:postgres /etc/pgbouncer/userlist.txt
 sudo systemctl restart pgbouncer
 
-# ── 1.12 Seguridad del SO ─────────────────────────────────────────────────────
+# ── 1.13 Seguridad del SO ─────────────────────────────────────────────────────
 step_sys "Aplicando hardening SSH, fail2ban, UFW..."
 sudo cp "$SCRIPT_DIR/deploy/security/10-sshd-settings.conf" /etc/ssh/sshd_config.d/
 [[ -f "$SCRIPT_DIR/deploy/security/banner" ]] && \
@@ -227,7 +252,7 @@ sudo sshd -t && sudo systemctl reload sshd
 sudo systemctl restart fail2ban
 info "Hardening aplicado."
 
-# ── 1.13 Systemd services ────────────────────────────────────────────────────
+# ── 1.14 Systemd services ────────────────────────────────────────────────────
 step_sys "Instalando units systemd..."
 sudo cp "$SCRIPT_DIR/deploy/sge.service" \
         "$SCRIPT_DIR/deploy/sge-frontend.service" \
@@ -283,8 +308,9 @@ info "Claves JWT generadas en /etc/sge/keys/"
 # ── 2.3 Traefik config como usuario sge ──────────────────────────────────────
 step_app "Instalando configuración de Traefik..."
 sed "s/sge.humanbyte.net/${SGE_DOMAIN}/g" "$SCRIPT_DIR/traefik/dynamic/routes.yml" \
-    | sudo -u sge tee /etc/sge/traefik/dynamic/routes.yml > /dev/null
-sudo -u sge cp "$SCRIPT_DIR/traefik/traefik.yml" /etc/sge/traefik/traefik.yml
+    | sudo -u traefik tee /etc/sge/traefik/dynamic/routes.yml > /dev/null
+sed "s/\${ACME_EMAIL}/${ACME_EMAIL}/g" "$SCRIPT_DIR/traefik/traefik.yml" \
+    | sudo -u traefik tee /etc/sge/traefik/traefik.yml > /dev/null
 
 # ── 2.4 Archivo .env como usuario sge ────────────────────────────────────────
 step_app "Generando /etc/sge/.env..."
@@ -326,7 +352,7 @@ step_app "Ejecutando migraciones de base de datos..."
 tar -xzf /tmp/sge-migrations.tar.gz -C /tmp/
 sudo -u sge PGPASSWORD="$DB_PASSWORD" migrate \
     -path /tmp/migrations \
-    -database "postgres://sge:${DB_PASSWORD}@127.0.0.1:5433/sge_platform?sslmode=disable" \
+    -database "postgres://sge:${DB_PASSWORD}@127.0.0.1:5432/sge_platform?sslmode=disable" \
     up
 rm -rf /tmp/migrations /tmp/sge-migrations.tar.gz /tmp/sge-frontend.tar.gz /tmp/sge /tmp/sgectl
 info "Migraciones completadas."
