@@ -21,7 +21,6 @@ Antes de comenzar verifique **todos** los puntos:
 | CPU | 2 vCPU | 4 vCPU |
 | RAM | 4 GB | 8 GB |
 | Disco | 40 GB SSD | 80 GB SSD |
-| Swap | 2 GB | 4 GB |
 | Arquitectura | amd64 | amd64 |
 
 > SGE **solo** tiene soporte oficial en Debian Estable (actualmente Debian 13). No instalar en Ubuntu, Debian testing/unstable ni derivados.
