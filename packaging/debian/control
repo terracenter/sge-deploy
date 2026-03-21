@@ -1,0 +1,23 @@
+Package: sge
+Version: 1.0.0
+Architecture: amd64
+Maintainer: Terracenter <soporte@terracenter.com>
+Pre-Depends: adduser
+Depends: postgresql-18,
+ redis-server (>= 7),
+ pgbouncer (>= 1.20),
+ nodejs (>= 24),
+ openssl,
+ curl,
+ rsync
+Recommends: ufw, fail2ban
+Section: misc
+Priority: optional
+Homepage: https://humanbyte.net
+Description: SGE -- Sistema de Gestion Empresarial
+ ERP multi-tenant SaaS para empresas en Latinoamerica.
+ Modulos: contabilidad, facturacion, tesoreria, partners,
+ gestion de licencias y modulos de comunidad instalables.
+ .
+ Incluye Traefik como reverse proxy con SSL automatico
+ via Let's Encrypt y soporte multi-tenant.

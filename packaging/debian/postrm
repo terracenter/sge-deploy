@@ -1,0 +1,69 @@
+#!/bin/bash
+set -e
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SGE — postrm
+# Se ejecuta DESPUES de desinstalar el paquete.
+#
+# IMPORTANTE — diferencia entre remove y purge:
+#   apt remove sge   → elimina binarios, mantiene /etc/sge y datos
+#   apt purge sge    → elimina TODO incluyendo configuracion
+#
+# Los backups en /var/lib/sge/backups NUNCA se eliminan automaticamente.
+# El administrador debe borrarlos manualmente si lo desea.
+# ─────────────────────────────────────────────────────────────────────────────
+
+case "$1" in
+    remove)
+        # Solo limpiamos sudoers — datos y configs se conservan
+        rm -f /etc/sudoers.d/sge-services
+
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload || true
+        fi
+        ;;
+
+    purge)
+        # Eliminar usuarios del sistema
+        if getent passwd sge > /dev/null 2>&1; then
+            deluser --quiet --remove-home sge 2>/dev/null || true
+        fi
+        if getent passwd traefik > /dev/null 2>&1; then
+            deluser --quiet traefik 2>/dev/null || true
+        fi
+
+        # Eliminar sudoers
+        rm -f /etc/sudoers.d/sge-services
+
+        # Eliminar configuracion y binarios
+        rm -rf /etc/sge
+        rm -rf /opt/sge
+        rm -rf /var/log/sge
+
+        # /var/lib/sge/backups se conserva intencionalmente.
+        # Contiene backups de PostgreSQL que el DBA debe revisar antes de borrar.
+        if [ -d /var/lib/sge ]; then
+            cat << 'MSG'
+
+AVISO: Los backups en /var/lib/sge/backups NO fueron eliminados.
+       Reviselos y eliminalos manualmente si ya no los necesita:
+         sudo rm -rf /var/lib/sge
+
+MSG
+        fi
+
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload || true
+        fi
+        ;;
+
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        ;;
+
+    *)
+        echo "postrm: argumento desconocido '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

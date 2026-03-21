@@ -1,0 +1,111 @@
+#!/bin/bash
+set -e
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SGE — postinst
+# Se ejecuta automaticamente despues de instalar o actualizar el paquete.
+# ─────────────────────────────────────────────────────────────────────────────
+
+case "$1" in
+    configure)
+
+        # ── Usuarios del sistema ──────────────────────────────────────────────
+        if ! getent passwd sge > /dev/null 2>&1; then
+            adduser --system --group \
+                    --no-create-home \
+                    --home /opt/sge \
+                    --shell /usr/sbin/nologin \
+                    --gecos "SGE application" \
+                    sge
+        fi
+
+        if ! getent passwd traefik > /dev/null 2>&1; then
+            adduser --system --group \
+                    --no-create-home \
+                    --shell /usr/sbin/nologin \
+                    --gecos "SGE Traefik proxy" \
+                    traefik
+            # traefik necesita escribir logs en /var/log/sge (propiedad de sge)
+            adduser traefik sge
+        fi
+
+        # ── Estructura FHS ────────────────────────────────────────────────────
+        mkdir -p /etc/sge/keys
+        mkdir -p /etc/sge/traefik/dynamic
+        mkdir -p /opt/sge/bin
+        mkdir -p /opt/sge/frontend
+        mkdir -p /var/log/sge
+        mkdir -p /var/lib/sge/backups
+        mkdir -p /var/lib/sge/data
+
+        # ── Permisos ──────────────────────────────────────────────────────────
+        chown -R sge:sge /etc/sge /opt/sge /var/log/sge /var/lib/sge
+        chmod 700 /etc/sge/keys
+
+        # acme.json DEBE existir con permisos 600 antes de que Traefik arranque
+        touch /etc/sge/traefik/acme.json
+        chmod 600 /etc/sge/traefik/acme.json
+        chown sge:sge /etc/sge/traefik/acme.json
+
+        # ── Configs Traefik (solo en instalacion nueva, no en upgrade) ────────
+        # En upgrade respetamos la configuracion existente del cliente
+        if [ -z "$2" ]; then
+            # $2 vacio = instalacion nueva (no upgrade)
+            if [ ! -f /etc/sge/traefik/traefik.yml ]; then
+                cp /usr/share/sge/templates/traefik.yml \
+                   /etc/sge/traefik/traefik.yml
+            fi
+            if [ ! -f /etc/sge/traefik/dynamic/routes.yml ]; then
+                cp /usr/share/sge/templates/routes.yml \
+                   /etc/sge/traefik/dynamic/routes.yml
+            fi
+        fi
+
+        chown -R sge:sge /etc/sge/traefik/
+
+        # ── sudoers: sge puede reiniciar sus servicios sin password ───────────
+        cat > /etc/sudoers.d/sge-services << 'SUDOERS'
+sge ALL=(ALL) NOPASSWD: /bin/systemctl restart sge, /bin/systemctl restart sge-frontend
+SUDOERS
+        chmod 440 /etc/sudoers.d/sge-services
+
+        # ── systemd: habilitar servicios (sin arrancar aun) ───────────────────
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload
+            systemctl enable sge.service sge-frontend.service sge-traefik.service \
+                2>/dev/null || true
+        fi
+
+        # ── Mensaje post-instalacion ──────────────────────────────────────────
+        cat << 'MSG'
+
+╔══════════════════════════════════════════════════════════════════╗
+║         SGE — Sistema de Gestión Empresarial                    ║
+║                Instalación completada                           ║
+╠══════════════════════════════════════════════════════════════════╣
+║                                                                  ║
+║  Los servicios NO están activos todavía.                        ║
+║  Para completar la configuración ejecute:                       ║
+║                                                                  ║
+║    sudo sgectl setup                                             ║
+║                                                                  ║
+║  IMPORTANTE: Lea la documentación ANTES de continuar.           ║
+║                                                                  ║
+║    Con LVM (producción):  https://docs.humanbyte.net/deploy/lvm ║
+║    Sin LVM / Contabo:     https://docs.humanbyte.net/deploy     ║
+║                                                                  ║
+╚══════════════════════════════════════════════════════════════════╝
+
+MSG
+        ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+
+    *)
+        echo "postinst: argumento desconocido '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0
