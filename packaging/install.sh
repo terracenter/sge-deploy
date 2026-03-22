@@ -143,7 +143,15 @@ REPO="terracenter/sge-deploy"
 if [ -n "$VERSION_PIN" ]; then
     API_URL="https://api.github.com/repos/${REPO}/releases/tags/${VERSION_PIN}"
 else
-    API_URL="https://api.github.com/repos/${REPO}/releases/latest"
+    # /releases/latest solo devuelve releases estables.
+    # Si falla (solo hay pre-releases), tomar el más reciente de /releases.
+    LATEST_URL="https://api.github.com/repos/${REPO}/releases/latest"
+    if curl -fsSL --max-time 10 -H "Accept: application/vnd.github+json" \
+        "$LATEST_URL" -o /dev/null 2>/dev/null; then
+        API_URL="$LATEST_URL"
+    else
+        API_URL="https://api.github.com/repos/${REPO}/releases?per_page=1"
+    fi
 fi
 
 RELEASE_JSON=$(curl -fsSL --max-time 30 \
@@ -155,6 +163,13 @@ PARSED=$(python3 - "$RELEASE_JSON" <<'PYEOF'
 import sys, json
 
 data = json.loads(sys.argv[1])
+
+# /releases?per_page=1 devuelve array; /releases/latest devuelve objeto
+if isinstance(data, list):
+    if not data:
+        print("ERROR: no hay releases disponibles", file=sys.stderr)
+        sys.exit(1)
+    data = data[0]
 
 if "message" in data:
     print(f"ERROR: {data['message']}", file=sys.stderr)
