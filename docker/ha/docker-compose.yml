@@ -322,8 +322,7 @@ services:
       DB_NAME: sge_panel
       DB_USER: ${PANEL_DB_USER}
       DB_PASSWORD: ${PANEL_DB_PASSWORD}
-      ADMIN_USER: ${PANEL_ADMIN_USER}
-      ADMIN_PASSWORD: ${PANEL_ADMIN_PASSWORD}
+      ADMIN_USER: ${PANEL_ADMIN_USER:-admin}
       PRIVATE_KEY_PATH: /app/keys/private.pem
       SGE_HTTPS: "true"
       SMTP_HOST: ${SMTP_HOST:-}
