@@ -118,34 +118,9 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PASO 3 — Contraseña del admin de sge-panel
+# PASO 3 — SMTP (opcional)
 # ─────────────────────────────────────────────────────────────────────────────
-header "Paso 3 — Contraseña del administrador"
-info "Esta es la única contraseña que debes definir tú."
-info "Las demás (bases de datos, Redis, replicación) se generan automáticamente."
-echo ""
-ask "Contraseña para el admin del panel (mínimo 12 caracteres):"
-while true; do
-    read -rsp "  → " PANEL_ADMIN_PASSWORD
-    echo ""
-    if [[ ${#PANEL_ADMIN_PASSWORD} -lt 12 ]]; then
-        err "Demasiado corta. Mínimo 12 caracteres."
-    else
-        read -rsp "  Confirmar contraseña: " PANEL_ADMIN_PASSWORD_CONFIRM
-        echo ""
-        if [[ "$PANEL_ADMIN_PASSWORD" != "$PANEL_ADMIN_PASSWORD_CONFIRM" ]]; then
-            err "Las contraseñas no coinciden. Intenta de nuevo."
-        else
-            ok "Contraseña aceptada"
-            break
-        fi
-    fi
-done
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PASO 4 — SMTP (opcional)
-# ─────────────────────────────────────────────────────────────────────────────
-header "Paso 4 — Configuración SMTP (opcional)"
+header "Paso 3 — Configuración SMTP (opcional)"
 info "Si no configuras SMTP, los emails del panel van al log del contenedor."
 echo ""
 ask "¿Configurar SMTP ahora? (s/N):"
@@ -214,10 +189,6 @@ PANEL_DB_PASSWORD=${PANEL_DB_PASSWORD}
 # ─── Redis ────────────────────────────────────────────────────────────────────
 REDIS_PASSWORD=${REDIS_PASSWORD}
 
-# ─── sge-panel admin ──────────────────────────────────────────────────────────
-PANEL_ADMIN_USER=admin
-PANEL_ADMIN_PASSWORD=${PANEL_ADMIN_PASSWORD}
-
 # ─── SMTP ────────────────────────────────────────────────────────────────────
 SMTP_HOST=${SMTP_HOST}
 SMTP_PORT=${SMTP_PORT}
@@ -263,11 +234,10 @@ echo ""
 echo -e "  Tipo:           $([ "$INSTALL_TYPE" == "1" ] && echo "IP pública (Let's Encrypt)" || echo "IP local (autofirmado)")"
 echo -e "  SGE:            https://${SGE_DOMAIN}"
 echo -e "  Panel:          https://${PANEL_DOMAIN}"
-echo -e "  Admin usuario:  admin"
-echo -e "  Admin password: ${PANEL_ADMIN_PASSWORD}"
 echo ""
 echo -e "  Las contraseñas de BD y Redis están en: ${ENV_FILE}"
-echo -e "  ${RED}Guarda la contraseña admin en un gestor de contraseñas ahora.${RESET}"
+echo -e "  ${YELLOW}Al abrir el panel por primera vez en el navegador, se pedirá${RESET}"
+echo -e "  ${YELLOW}crear el usuario y contraseña administrador.${RESET}"
 echo ""
 echo -e "  Siguiente paso:"
 echo -e "  ${CYAN}sudo bash scripts/00-setup-lvm.sh${RESET}"
