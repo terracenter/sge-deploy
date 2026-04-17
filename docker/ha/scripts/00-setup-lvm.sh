@@ -183,7 +183,7 @@ ALL_OK=true
 for LV_NAME in "${!LV_PATHS[@]}"; do
     MOUNT_PATH="${LV_PATHS[$LV_NAME]}"
     if [[ -d "$MOUNT_PATH" ]]; then
-        OWNER=$(stat -c "%U:%G" "$MOUNT_PATH")
+        OWNER=$(stat -c "%u:%g" "$MOUNT_PATH")
         if [[ "$USE_LVM" == "true" ]] && mountpoint -q "$MOUNT_PATH"; then
             echo "  ✓ [LVM] $MOUNT_PATH ($OWNER)"
         elif [[ "$USE_LVM" == "false" ]]; then
