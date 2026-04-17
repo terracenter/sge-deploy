@@ -32,10 +32,7 @@ services:
     volumes:
       - type: bind
         source: /srv/ha/pg-primary-data
-        target: /var/lib/postgresql/data
-      - type: bind
-        source: /srv/ha/pg-primary-wal
-        target: /var/lib/postgresql/data/pg_wal
+        target: /var/lib/postgresql
       - type: bind
         source: /srv/ha/sge-data
         target: /srv/sge_data
@@ -70,10 +67,7 @@ services:
     volumes:
       - type: bind
         source: /srv/ha/pg-replica-data
-        target: /var/lib/postgresql/data
-      - type: bind
-        source: /srv/ha/pg-replica-wal
-        target: /var/lib/postgresql/data/pg_wal
+        target: /var/lib/postgresql
     networks:
       - sge-ha-network
     depends_on:
