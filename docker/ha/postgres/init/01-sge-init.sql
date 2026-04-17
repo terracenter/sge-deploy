@@ -8,7 +8,7 @@
 -- Base de datos principal de SGE (ya existe si POSTGRES_DB=sge_platform)
 -- Solo crear sge_panel que no se crea automáticamente
 CREATE DATABASE sge_panel
-    OWNER postgres
+    OWNER sge
     ENCODING 'UTF8'
     LC_COLLATE 'en_US.UTF-8'
     LC_CTYPE 'en_US.UTF-8'
