@@ -94,7 +94,7 @@ if [[ "$INSTALL_TYPE" == "1" ]]; then
 
 else
     # IP local
-    DETECTED_IP=$(hostname -I | awk '{print $1}')
+    DETECTED_IP=$(ip -br a | awk '$2 == "UP" {split($3, a, "/"); print a[1]; exit}')
     info "IP detectada en este equipo: ${DETECTED_IP}"
     echo ""
     ask "¿Usar esta IP para el /etc/hosts? (S/n):"
