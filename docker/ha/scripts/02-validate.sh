@@ -85,15 +85,15 @@ else
     check "PostgreSQL WAL accesible" "no se pudo consultar"
 fi
 
-# PostgreSQL 18 almacena datos en /var/lib/postgresql/18/main/ (no en /data)
-PG18_MAIN=$(docker exec sge-ha-pg-primary \
-    bash -c "test -d /var/lib/postgresql/18/main && echo ok || echo missing" \
+# PostgreSQL 18 (imagen Docker oficial) almacena datos en /var/lib/postgresql/18/docker/
+PG18_DATA=$(docker exec sge-ha-pg-primary \
+    bash -c "test -d /var/lib/postgresql/18/docker && echo ok || echo missing" \
     2>/dev/null || echo "error")
 
-if [[ "$PG18_MAIN" == "ok" ]]; then
-    check "PostgreSQL 18 — datos en /var/lib/postgresql/18/main" "ok"
+if [[ "$PG18_DATA" == "ok" ]]; then
+    check "PostgreSQL 18 — datos en /var/lib/postgresql/18/docker" "ok"
 else
-    check "PostgreSQL 18 — datos en /var/lib/postgresql/18/main" "no encontrado"
+    check "PostgreSQL 18 — datos en /var/lib/postgresql/18/docker" "no encontrado"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

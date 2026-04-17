@@ -285,12 +285,13 @@ docker exec sge-ha-pg-primary pg_isready -U "$DB_USER" -d sge_platform
 Verificar la estructura de datos de PostgreSQL 18:
 
 ```bash
-# PostgreSQL 18 almacena los datos en un subdirectorio con la versión mayor
+# PostgreSQL 18 (imagen Docker oficial) almacena los datos en:
+# /var/lib/postgresql/18/docker/  ← el cluster se llama "docker", no "main"
 docker exec sge-ha-pg-primary bash -c "ls /var/lib/postgresql/"
 # Debe mostrar: 18
 
 docker exec sge-ha-pg-primary bash -c "ls /var/lib/postgresql/18/"
-# Debe mostrar: main
+# Debe mostrar: docker
 ```
 
 ---
