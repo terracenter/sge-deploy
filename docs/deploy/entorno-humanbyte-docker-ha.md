@@ -163,39 +163,28 @@ cd /opt/sge/Sge-Deploy/docker/ha
 
 ## Sección 2 — Configurar variables de entorno
 
-```bash
-cp .env.example .env
-```
-
-Editar `.env` con los valores reales:
+El script interactivo guía la configuración paso a paso, genera todas las
+contraseñas automáticamente y crea el `.env` listo para usar.
 
 ```bash
-# Dominio y TLS
-SGE_DOMAIN=sge.humanbyte.net
-PANEL_DOMAIN=panel-sge.humanbyte.net
-
-# Con IP pública y DNS configurado:
-TLS_RESOLVER=letsencrypt
-ACME_EMAIL=terracenter@gmail.com
-
-# Sin IP pública (local):
-# TLS_RESOLVER=selfsigned
-
-# Contraseñas — usar valores seguros (≥ 24 caracteres aleatorios)
-DB_PASSWORD=<genera con: openssl rand -hex 20>
-REPLICATOR_PASSWORD=<genera con: openssl rand -hex 20>
-PANEL_DB_PASSWORD=<genera con: openssl rand -hex 20>
-REDIS_PASSWORD=<genera con: openssl rand -hex 20>
-PANEL_ADMIN_PASSWORD=<tu contraseña de admin del panel>
+bash scripts/setup-env.sh
 ```
 
-Generador de contraseñas:
+El script pregunta:
+1. **Tipo de instalación** — IP pública (Let's Encrypt) o IP local (autofirmado)
+2. **Dominios** — SGE y panel, o los detecta automáticamente
+3. **Contraseña del admin** — la única que defines tú (mínimo 12 caracteres)
+4. **SMTP** — opcional; sin esto los emails van al log del contenedor
+5. **`/etc/hosts`** — si es instalación local, ofrece agregarlo automáticamente
 
-```bash
-openssl rand -hex 20
-```
+Las contraseñas de PostgreSQL, Redis y replicación se generan solas con `openssl rand`.
 
-Cargar las variables en la sesión actual:
+Al finalizar muestra un resumen y te indica el siguiente paso.
+
+> El `.env` se crea con permisos `600` — solo tu usuario puede leerlo.
+> Guarda la contraseña admin en un gestor de contraseñas inmediatamente.
+
+Cargar las variables en la sesión actual (necesario para los scripts siguientes):
 
 ```bash
 source .env
