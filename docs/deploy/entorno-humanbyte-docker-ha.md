@@ -132,20 +132,31 @@ Y usar `TLS_RESOLVER=selfsigned` en el `.env` (sección 3).
 ## Sección 1 — Clonar y preparar los repositorios
 
 ```bash
-# Posicionarse en el directorio padre (donde están los repos)
-cd /opt   # o el directorio que uses — los repos deben ser hermanos
+# Crear directorio base y asignar al usuario actual
+sudo mkdir -p /opt/sge
+sudo chown $USER:$USER /opt/sge
+cd /opt/sge
+```
 
+```bash
+# Clonar los tres repositorios (requiere acceso SSH a GitHub de terracenter)
+git clone git@github.com:terracenter/sge-go.git Sge-Go
+git clone git@github.com:terracenter/sge-panel.git sge-panel
+git clone git@github.com:terracenter/sge-deploy.git Sge-Deploy
+```
+
+```bash
 # Verificar estructura
-ls -la
-# debe mostrar: Sge-Go/  sge-panel/  Sge-Deploy/
+ls /opt/sge
+# debe mostrar: Sge-Go  sge-panel  Sge-Deploy
 ```
 
 ```bash
 # Ir al directorio de trabajo del entorno HA
-cd Sge-Deploy/docker/ha
+cd /opt/sge/Sge-Deploy/docker/ha
 ```
 
-> Todos los comandos del manual se ejecutan desde `Sge-Deploy/docker/ha/`
+> Todos los comandos del manual se ejecutan desde `/opt/sge/Sge-Deploy/docker/ha/`
 > salvo que se indique lo contrario.
 
 ---
