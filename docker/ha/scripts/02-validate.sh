@@ -73,9 +73,9 @@ for DIR in /srv/ha/pg-primary-data /srv/ha/pg-primary-wal \
 done
 
 # ─────────────────────────────────────────────────────────────────────────────
-section "PostgreSQL — WAL separado"
+section "PostgreSQL — estructura de datos"
 # ─────────────────────────────────────────────────────────────────────────────
-PG_WAL_LOC=$(docker exec sge-ha-pg-primary \
+PG_WAL_LOC=$(docker exec -e PGPASSWORD="${DB_PASSWORD:-}" sge-ha-pg-primary \
     psql -U "${DB_USER:-sge}" -d postgres -tAc \
     "SELECT pg_walfile_name(pg_current_wal_lsn());" 2>/dev/null || echo "error")
 
@@ -85,15 +85,15 @@ else
     check "PostgreSQL WAL accesible" "no se pudo consultar"
 fi
 
-# Verificar que pg_wal es un directorio (bind mount del LV, sin symlinks)
-WAL_TYPE=$(docker exec sge-ha-pg-primary \
-    bash -c "test -d /var/lib/postgresql/data/pg_wal && echo directory || echo missing" \
+# PostgreSQL 18 almacena datos en /var/lib/postgresql/18/main/ (no en /data)
+PG18_MAIN=$(docker exec sge-ha-pg-primary \
+    bash -c "test -d /var/lib/postgresql/18/main && echo ok || echo missing" \
     2>/dev/null || echo "error")
 
-if [[ "$WAL_TYPE" == "directory" ]]; then
-    check "pg_wal es directorio (bind mount LV, sin symlinks)" "ok"
+if [[ "$PG18_MAIN" == "ok" ]]; then
+    check "PostgreSQL 18 — datos en /var/lib/postgresql/18/main" "ok"
 else
-    check "pg_wal" "no encontrado: $WAL_TYPE"
+    check "PostgreSQL 18 — datos en /var/lib/postgresql/18/main" "no encontrado"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

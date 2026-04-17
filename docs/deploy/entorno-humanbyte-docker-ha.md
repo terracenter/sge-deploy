@@ -47,18 +47,18 @@ bind mounts normales — sin configuración adicional en PostgreSQL ni symlinks.
 
 | Directorio host | Contenedor | LV recomendado |
 |-----------------|------------|----------------|
-| `/srv/ha/pg-primary-data` | postgres-primary `/var/lib/postgresql/data` | `ha-pg-primary-data` 10G |
-| `/srv/ha/pg-primary-wal` | postgres-primary `/var/lib/postgresql/data/pg_wal` | `ha-pg-primary-wal` 2G |
-| `/srv/ha/pg-replica-data` | postgres-replica `/var/lib/postgresql/data` | `ha-pg-replica-data` 10G |
-| `/srv/ha/pg-replica-wal` | postgres-replica `/var/lib/postgresql/data/pg_wal` | `ha-pg-replica-wal` 2G |
+| `/srv/ha/pg-primary-data` | postgres-primary `/var/lib/postgresql` | `ha-pg-primary-data` 10G |
+| `/srv/ha/pg-replica-data` | postgres-replica `/var/lib/postgresql` | `ha-pg-replica-data` 10G |
 | `/srv/ha/sge-data` | postgres-primary `/srv/sge_data` | `ha-sge-data` 5G |
 | `/srv/ha/redis-data` | redis `/data` | `ha-redis-data` 1G |
 | `/srv/ha/nats-data` | nats `/data` | `ha-nats-data` 1G |
 | `/srv/ha/traefik-certs` | traefik `/etc/traefik/acme` | solo directorio |
 
-> Docker aplica todos los bind mounts antes de iniciar el proceso del contenedor,
-> por lo que `/var/lib/postgresql/data/pg_wal` ya existe cuando `initdb` arranca.
-> PostgreSQL lo usa directamente como directorio — sin symlinks.
+> **PostgreSQL 18** cambió la estructura interna de la imagen Docker. Los datos se
+> almacenan en `/var/lib/postgresql/18/main/` (subdirectorio con la versión mayor).
+> Por eso el mount va en `/var/lib/postgresql` — no en `/var/lib/postgresql/data`.
+> Los LVs `ha-pg-primary-wal` y `ha-pg-replica-wal` quedan montados en el host
+> pero no se usan dentro del contenedor (WAL vive dentro del LV de datos).
 
 ---
 
@@ -282,18 +282,15 @@ docker exec sge-ha-pg-primary pg_isready -U "$DB_USER" -d sge_platform
 # Debe responder: /var/run/postgresql:5432 - accepting connections
 ```
 
-Verificar que `pg_wal` es un directorio normal (bind mount del LV, sin symlinks):
+Verificar la estructura de datos de PostgreSQL 18:
 
 ```bash
-docker exec sge-ha-pg-primary \
-  bash -c "ls -la /var/lib/postgresql/data/ | grep pg_wal"
-# Debe mostrar: drwx------ ... pg_wal  (directorio, NO symlink)
-```
+# PostgreSQL 18 almacena los datos en un subdirectorio con la versión mayor
+docker exec sge-ha-pg-primary bash -c "ls /var/lib/postgresql/"
+# Debe mostrar: 18
 
-```bash
-# Confirmar que el LV del host está montado en ese directorio
-findmnt /srv/ha/pg-primary-wal
-# Debe mostrar: /srv/ha/pg-primary-wal /dev/vg0/ha-pg-primary-wal xfs ...
+docker exec sge-ha-pg-primary bash -c "ls /var/lib/postgresql/18/"
+# Debe mostrar: main
 ```
 
 ---
@@ -309,7 +306,7 @@ El script realiza:
 1. Crea el usuario `replicator` en el primario
 2. Asigna contraseña al usuario `sge_panel`
 3. Ajusta permisos en los directorios de réplica
-4. Ejecuta `pg_basebackup` con WAL separado (`--waldir=/var/lib/pg_wal`)
+4. Ejecuta `pg_basebackup` para copiar los datos del primario a la réplica
 5. Verifica que `standby.signal` fue creado
 
 Salida esperada al final:
@@ -460,12 +457,12 @@ Salida esperada:
 
 ── Almacenamiento (bind mounts LVM) ─────────────────────────────────────
   ✓ /srv/ha/pg-primary-data [LVM+xfs]
-  ✓ /srv/ha/pg-primary-wal [LVM+xfs]
-  ...
+  ✓ /srv/ha/sge-data [LVM+xfs]
+  ✓ /srv/ha/redis-data [LVM+xfs]
+  ✓ /srv/ha/nats-data [LVM+xfs]
 
-── PostgreSQL — WAL separado ────────────────────────────────────────────
+── PostgreSQL — estructura de datos ────────────────────────────────────
   ✓ PostgreSQL WAL accesible
-  ✓ pg_wal es directorio (bind mount LV, sin symlinks)
 
 ── Replicación streaming (si réplica está activa) ───────────────────────
   ✓ Replicación streaming
