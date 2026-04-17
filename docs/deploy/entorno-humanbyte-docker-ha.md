@@ -173,16 +173,16 @@ bash scripts/setup-env.sh
 El script pregunta:
 1. **Tipo de instalación** — IP pública (Let's Encrypt) o IP local (autofirmado)
 2. **Dominios** — SGE y panel, o los detecta automáticamente
-3. **Contraseña del admin** — la única que defines tú (mínimo 12 caracteres)
-4. **SMTP** — opcional; sin esto los emails van al log del contenedor
-5. **`/etc/hosts`** — si es instalación local, ofrece agregarlo automáticamente
+3. **SMTP** — opcional; sin esto los emails van al log del contenedor
+4. **`/etc/hosts`** — si es instalación local, ofrece agregarlo automáticamente
 
 Las contraseñas de PostgreSQL, Redis y replicación se generan solas con `openssl rand`.
+**La contraseña del admin del panel NO se configura aquí** — se crea en el navegador
+la primera vez que abres `https://<PANEL_DOMAIN>`.
 
 Al finalizar muestra un resumen y te indica el siguiente paso.
 
 > El `.env` se crea con permisos `600` — solo tu usuario puede leerlo.
-> Guarda la contraseña admin en un gestor de contraseñas inmediatamente.
 
 Cargar las variables en la sesión actual (necesario para los scripts siguientes):
 
@@ -465,7 +465,7 @@ Salida esperada:
 
 ── PostgreSQL — WAL separado ────────────────────────────────────────────
   ✓ PostgreSQL WAL accesible
-  ✓ pg_wal es symlink → /var/lib/pg_wal
+  ✓ pg_wal es directorio (bind mount LV, sin symlinks)
 
 ── Replicación streaming (si réplica está activa) ───────────────────────
   ✓ Replicación streaming
@@ -493,11 +493,26 @@ Salida esperada:
 | URL | Resultado esperado |
 |-----|-------------------|
 | `https://sge.humanbyte.net` | Pantalla de login SGE |
-| `https://panel-sge.humanbyte.net` | Pantalla de login sge-panel |
+| `https://panel-sge.humanbyte.net` | **Pantalla de configuración inicial** (primer arranque) |
 | `http://localhost:8888` | Dashboard Traefik |
 
 > Con `TLS_RESOLVER=selfsigned`: el navegador muestra advertencia de certificado.
 > Aceptar manualmente o agregar el certificado Traefik como confiable.
+
+### Primer acceso al panel (sge-panel)
+
+La primera vez que abres `https://panel-sge.humanbyte.net`, el panel detecta
+que no hay ningún usuario administrador y muestra la pantalla **"Configuración inicial"**.
+
+1. Ingresa el nombre de usuario (por defecto `admin`)
+2. Ingresa la contraseña (mínimo 12 caracteres) y confírmala
+3. Haz clic en **"Crear administrador"**
+4. El panel redirige automáticamente a la pantalla de login
+
+A partir de ese momento, la URL siempre muestra el login normal.
+
+> Esta pantalla de configuración no vuelve a aparecer — si la necesitas de nuevo
+> (ej. recuperación), deberás conectarte directamente a la base de datos.
 
 ---
 
