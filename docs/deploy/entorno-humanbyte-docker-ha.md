@@ -244,41 +244,91 @@ source .env
 
 ## Sección 3 — Preparar almacenamiento
 
-El script detecta automáticamente si hay LVM disponible. Si hay un Volume Group,
-crea y formatea los LVs en XFS. Si no, crea directorios normales.
+### ⚠ Paso obligatorio antes de ejecutar el script: identificar el disco de datos
+
+El script crea ~31 G de LVs. **NUNCA** deben crearse en el VG del sistema operativo.
+Si lo haces, los datos de SGE quedan mezclados con el SO y el disco del sistema se llena.
+
+**Primero, identificar los discos del servidor:**
 
 ```bash
-# Ver si hay VGs disponibles
+sudo lsblk
+```
+
+Salida típica de una VM con disco de SO + disco de datos:
+
+```
+NAME           MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+vda            254:0    0   30G  0 disk
+├─vda1         254:1    0  976M  0 part /boot
+└─vda5         254:5    0   29G  0 part
+  ├─vg0-root   253:0    0  6.6G  0 lvm  /
+  ├─vg0-var    253:1    0  1.9G  0 lvm  /var
+  └─...
+vdb            254:16   0   50G  0 disk           ← disco de datos SGE (vacío)
+```
+
+En este ejemplo:
+- `vg0` → VG del sistema operativo, vive en `vda` → **NO tocar**
+- `vdb` → disco limpio de 50 G → **aquí van los LVs de SGE**
+
+**Inicializar el disco de datos y crear el VG dedicado:**
+
+```bash
+# Inicializar vdb como Physical Volume LVM
+sudo pvcreate /dev/vdb
+
+# Crear el Volume Group dedicado para SGE
+sudo vgcreate vg-ha /dev/vdb
+
+# Verificar — deben aparecer dos VGs: vg0 (SO) y vg-ha (SGE)
 sudo vgs
 ```
 
+Salida esperada:
+
+```
+  VG    #PV #LV #SN Attr   VSize   VFree
+  vg-ha   1   0   0 wz--n- <50.00g <50.00g
+  vg0     1   6   0 wz--n-  28.98g       0
+```
+
+> **Si solo tienes un disco** (el SO y SGE comparten el mismo disco físico), el script
+> puede detectar `vg0` automáticamente y crear los LVs ahí si hay espacio libre. Solo
+> es aceptable en entornos de prueba con disco grande (≥ 80 G). En producción, usar
+> siempre un disco dedicado.
+
+---
+
+### Ejecutar el script de almacenamiento
+
 ```bash
-# Ejecutar el script (detecta VG automáticamente)
-sudo bash scripts/00-setup-lvm.sh
-
-# O especificar el VG manualmente:
-sudo bash scripts/00-setup-lvm.sh vg0
+# Siempre indicar el VG de datos explícitamente — nunca dejar que el script adivine
+sudo bash scripts/00-setup-lvm.sh vg-ha
 ```
 
-Verificar salida esperada:
+El script crea los LVs, los formatea en XFS y los monta bajo `/srv/ha/`:
 
 ```
-✓ Volume Group 'vg0' encontrado
+✓ Volume Group 'vg-ha' encontrado (especificado manualmente)
 → Creando LV: ha-pg-primary-data (10G)...
-→ Creando LV: ha-pg-primary-wal (2G)...
+→ Creando LV: ha-sge-data (5G)...
 ...
 ✓ Almacenamiento listo. Continúa con la sección 4 del manual.
 ```
 
-### Verificación manual
+### Verificación
 
 ```bash
-# Con LVM:
-findmnt /srv/ha/pg-primary-data
-findmnt /srv/ha/pg-primary-wal
+# Listar LVs creados en el VG de SGE
+sudo lvs vg-ha
 
-# Sin LVM:
-ls -la /srv/ha/
+# Confirmar que están montados
+findmnt /srv/ha/pg-primary-data
+findmnt /srv/ha/redis-data
+
+# Ver propietarios (pg-primary-data debe ser 999:999)
+ls -lan /srv/ha/
 ```
 
 ---
