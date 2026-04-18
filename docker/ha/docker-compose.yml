@@ -86,7 +86,7 @@ services:
   # Pool mode: session (compatible con prepared statements de pgx)
   # ───────────────────────────────────────────────────────────────────────────
   pgbouncer:
-    image: bitnami/pgbouncer:1.23.1
+    image: bitnami/pgbouncer:latest
     container_name: sge-ha-pgbouncer
     environment:
       PGBOUNCER_DATABASE: sge_platform
