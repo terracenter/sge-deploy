@@ -94,14 +94,18 @@ ls sge-panel/keys/private.pem
 ls sge-panel/keys/public.pem
 ```
 
-Si no existen, generarlas antes de continuar:
+Si no existen, generarlas con OpenSSL (no requiere Go instalado):
 
 ```bash
-# En Sge-Go/
-make keygen
+# Ed25519 para sge-panel
+openssl genpkey -algorithm ed25519 -out sge-panel/keys/private.pem
+openssl pkey -in sge-panel/keys/private.pem -pubout -out sge-panel/keys/public.pem
+chmod 600 sge-panel/keys/private.pem
 
-# En sge-panel/
-make keygen
+# RSA para Sge-Go (JWT RS256)
+openssl genrsa -out Sge-Go/configs/keys/private.pem 4096
+openssl rsa -in Sge-Go/configs/keys/private.pem -pubout -out Sge-Go/configs/keys/public.pem
+chmod 600 Sge-Go/configs/keys/private.pem
 ```
 
 ### DNS (con IP pública)
@@ -126,6 +130,47 @@ Agregar al `/etc/hosts` del equipo desde el que se accede:
 ```
 
 Y usar `TLS_RESOLVER=selfsigned` en el `.env` (sección 3).
+
+---
+
+## Sección 0 — Instalar prerequisitos en Debian 13
+
+En una VM Debian 13 limpia, instalar Git y Docker antes de continuar.
+
+### Git
+
+```bash
+sudo apt update && sudo apt install -y git curl
+```
+
+### Docker Engine
+
+```bash
+# Agregar repositorio oficial de Docker
+curl -fsSL https://download.docker.com/linux/debian/gpg \
+  | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list
+
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# Permitir usar docker sin sudo
+sudo usermod -aG docker $USER
+newgrp docker
+
+# Verificar
+docker --version
+docker compose version
+```
+
+### LVM
+
+```bash
+sudo apt install -y lvm2
+```
 
 ---
 
