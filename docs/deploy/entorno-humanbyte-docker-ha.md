@@ -135,41 +135,46 @@ Y usar `TLS_RESOLVER=selfsigned` en el `.env` (sección 3).
 
 ## Sección 0 — Instalar prerequisitos en Debian 13
 
-En una VM Debian 13 limpia, instalar Git y Docker antes de continuar.
+En una VM Debian 13 limpia, instalar Git, Docker y LVM antes de continuar.
 
-### Git
+### Paquetes base
 
 ```bash
-sudo apt update && sudo apt install -y git curl
+sudo apt update
+sudo apt install -y git curl ca-certificates lvm2
 ```
 
 ### Docker Engine
 
+Seguir el método oficial Docker para Debian (compatible con bash y zsh):
+
 ```bash
-# Agregar repositorio oficial de Docker
-curl -fsSL https://download.docker.com/linux/debian/gpg \
-  | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+# 1. Crear directorio para claves APT
+sudo install -m 0755 -d /etc/apt/keyrings
 
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-  https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
-  | sudo tee /etc/apt/sources.list.d/docker.list
+# 2. Descargar clave GPG de Docker (formato .asc — no requiere gnupg)
+sudo curl -fsSL https://download.docker.com/linux/debian/gpg \
+  -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
 
+# 3. Agregar repositorio oficial de Docker
+. /etc/os-release
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+  https://download.docker.com/linux/debian ${VERSION_CODENAME} stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# 4. Instalar Docker Engine y plugin Compose
 sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo apt install -y docker-ce docker-ce-cli containerd.io \
+  docker-buildx-plugin docker-compose-plugin
 
-# Permitir usar docker sin sudo
+# 5. Permitir usar docker sin sudo (requiere cerrar sesión y volver a entrar)
 sudo usermod -aG docker $USER
 newgrp docker
 
-# Verificar
-docker --version
-docker compose version
-```
-
-### LVM
-
-```bash
-sudo apt install -y lvm2
+# 6. Verificar
+docker --version        # debe mostrar ≥ 26.0
+docker compose version  # debe mostrar ≥ 2.24
 ```
 
 ---
