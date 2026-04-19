@@ -46,6 +46,14 @@ if [[ "$(uname -s)" != "Linux" ]]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Verificar dependencias requeridas
+# ─────────────────────────────────────────────────────────────────────────────
+if ! command -v mkfs.xfs &>/dev/null; then
+    echo "ERROR: mkfs.xfs no encontrado. Instalar con: sudo apt install -y xfsprogs" >&2
+    exit 1
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Detectar si LVM está disponible
 # ─────────────────────────────────────────────────────────────────────────────
 USE_LVM=false
