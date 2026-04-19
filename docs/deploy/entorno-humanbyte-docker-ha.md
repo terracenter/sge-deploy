@@ -141,7 +141,7 @@ En una VM Debian 13 limpia, instalar Git, Docker y LVM antes de continuar.
 
 ```bash
 sudo apt update
-sudo apt install -y git curl ca-certificates lvm2
+sudo apt install -y git curl ca-certificates lvm2 xfsprogs
 ```
 
 ### Docker Engine
