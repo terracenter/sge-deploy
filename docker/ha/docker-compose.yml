@@ -62,12 +62,13 @@ services:
     image: postgres:18-bookworm
     container_name: sge-ha-pg-replica
     profiles: [replica]
-    environment:
-      PGDATA: /var/lib/postgresql/data
     volumes:
       - type: bind
         source: /srv/ha/pg-replica-data
         target: /var/lib/postgresql
+      - type: bind
+        source: /srv/ha/pg-replica-wal
+        target: /var/lib/postgresql/pg_wal
     networks:
       - sge-ha-network
     depends_on:
