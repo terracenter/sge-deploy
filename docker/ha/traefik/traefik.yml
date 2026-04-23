@@ -2,27 +2,21 @@
 # Traefik v3 — Entorno HA Humanbyte
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Nivel de log (DEBUG solo para diagnóstico, en producción usar ERROR)
 log:
   level: INFO
 
-# API y dashboard (solo para debug — en producción comentar o restringir)
+ping: {}
+
 api:
   dashboard: true
-  insecure: true   # dashboard accesible en :8888 sin auth
+  insecure: true   # dashboard en :8888
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Entry points
+# Entry points — HTTP sin redirect (testing con IP)
 # ─────────────────────────────────────────────────────────────────────────────
 entryPoints:
   web:
     address: ":80"
-    http:
-      redirections:
-        entryPoint:
-          to: websecure
-          scheme: https
-          permanent: true
 
   websecure:
     address: ":443"
@@ -40,7 +34,6 @@ providers:
 # ─────────────────────────────────────────────────────────────────────────────
 certificatesResolvers:
 
-  # ── Opción A: Let's Encrypt (requiere IP pública y DNS configurado) ─────────
   letsencrypt:
     acme:
       email: "${ACME_EMAIL}"
@@ -48,8 +41,4 @@ certificatesResolvers:
       httpChallenge:
         entryPoint: web
 
-  # ── Opción B: Certificado autofirmado Traefik (local / sin IP pública) ──────
-  # No requiere configuración adicional. En los labels de los servicios usar:
-  #   TLS_RESOLVER=selfsigned
-  # Los navegadores mostrarán advertencia de seguridad — aceptar manualmente.
   selfsigned: {}

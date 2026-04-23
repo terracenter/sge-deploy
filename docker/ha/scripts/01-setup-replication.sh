@@ -117,15 +117,16 @@ docker run --rm \
     --network "$NETWORK" \
     -e PGPASSWORD="$REPLICATOR_PASSWORD" \
     -v "$REPLICA_DATA:/var/lib/postgresql/data" \
-    -v "$REPLICA_WAL:/var/lib/postgresql/data/pg_wal" \
+    -v "$REPLICA_WAL:/var/lib/postgresql/pg_wal" \
     "$PG_IMAGE" \
     bash -c "
-        chown -R $PG_UID:$PG_UID /var/lib/postgresql/data /var/lib/postgresql/data/pg_wal && \
+        chown -R $PG_UID:$PG_UID /var/lib/postgresql/data /var/lib/postgresql/pg_wal && \
         su -c \"pg_basebackup \
             -h $PRIMARY_CONTAINER \
             -p 5432 \
             -U replicator \
             -D /var/lib/postgresql/data \
+            --waldir=/var/lib/postgresql/pg_wal \
             -P \
             -R \
             --wal-method=stream \
