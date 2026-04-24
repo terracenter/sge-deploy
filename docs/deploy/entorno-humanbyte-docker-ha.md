@@ -133,18 +133,93 @@ Y usar `TLS_RESOLVER=selfsigned` en el `.env` (sección 3).
 
 ---
 
-## Sección 0 — Instalar prerequisitos en Debian 13
+## Sección 0 — Paquetes base
 
-En una VM Debian 13 limpia, instalar Git, Docker y LVM antes de continuar.
-
-### Paquetes base
+En una VM Debian 13 limpia, instalar los prerequisitos del sistema:
 
 ```bash
 sudo apt update
 sudo apt install -y git curl ca-certificates lvm2 xfsprogs
 ```
 
-### Docker Engine
+---
+
+## Sección 1 — Clonar y preparar los repositorios
+
+Los scripts de configuración viven en Sge-Deploy, por lo que se clonan primero
+antes de ejecutar cualquier script.
+
+```bash
+# Crear directorio base y asignar al usuario actual
+sudo mkdir -p /opt/sge
+sudo chown $USER:$USER /opt/sge
+cd /opt/sge
+```
+
+```bash
+# Clonar los tres repositorios (requiere acceso SSH a GitHub de terracenter)
+git clone git@github.com:terracenter/sge-go.git Sge-Go
+git clone git@github.com:terracenter/sge-panel.git sge-panel
+git clone git@github.com:terracenter/sge-deploy.git Sge-Deploy
+```
+
+```bash
+# Verificar estructura
+ls /opt/sge
+# debe mostrar: Sge-Go  sge-panel  Sge-Deploy
+```
+
+```bash
+# Ir al directorio de trabajo del entorno HA
+cd /opt/sge/Sge-Deploy/docker/ha
+```
+
+> Todos los comandos del manual se ejecutan desde `/opt/sge/Sge-Deploy/docker/ha/`
+> salvo que se indique lo contrario.
+
+---
+
+## Sección 1.1 — LVM para Docker (ejecutar ANTES de instalar Docker Engine)
+
+Docker usa dos directorios de alto crecimiento que deben estar montados en LVs
+antes de que Docker arranque por primera vez. De lo contrario Docker inicializa
+en el disco del SO y no aprovecha el aislamiento.
+
+| LV | Tamaño | Ruta | Propósito |
+|----|--------|------|-----------|
+| `docker-containerd` | 6G | `/var/lib/containerd` | Image store (comprimido + descomprimido = ~2× el tamaño de las imágenes; 4 imágenes SGE requieren ~3G de capas) |
+| `docker-data` | 6G | `/var/lib/docker` | Volúmenes: bases de datos, logs, configs persistentes |
+
+**Por qué LVM aquí:** si `/var/lib/containerd` se llena, solo fallan las descargas
+de imágenes — el servidor sigue operativo. Ambos LVs se extienden en caliente
+con `lvextend` sin apagar Docker.
+
+Identificar el VG del sistema operativo:
+
+```bash
+sudo vgs
+# El VG del SO suele llamarse vg0 — verificar cuál tiene el LV de /
+sudo lvs | grep root
+```
+
+Crear los LVs y montarlos:
+
+```bash
+# Pasar el VG del SO (ej. vg0) — NUNCA pasar vg-ha (es el VG de datos SGE)
+sudo bash scripts/00-setup-docker-lvm.sh vg0
+```
+
+Verificar:
+
+```bash
+findmnt /var/lib/containerd
+findmnt /var/lib/docker
+# Ambos deben aparecer como tipo xfs montados desde /dev/vg0/docker-*
+```
+
+---
+
+## Sección 1.2 — Instalar Docker Engine
 
 Seguir el método oficial Docker para Debian (compatible con bash y zsh):
 
@@ -176,38 +251,6 @@ newgrp docker
 docker --version        # debe mostrar ≥ 26.0
 docker compose version  # debe mostrar ≥ 2.24
 ```
-
----
-
-## Sección 1 — Clonar y preparar los repositorios
-
-```bash
-# Crear directorio base y asignar al usuario actual
-sudo mkdir -p /opt/sge
-sudo chown $USER:$USER /opt/sge
-cd /opt/sge
-```
-
-```bash
-# Clonar los tres repositorios (requiere acceso SSH a GitHub de terracenter)
-git clone git@github.com:terracenter/sge-go.git Sge-Go
-git clone git@github.com:terracenter/sge-panel.git sge-panel
-git clone git@github.com:terracenter/sge-deploy.git Sge-Deploy
-```
-
-```bash
-# Verificar estructura
-ls /opt/sge
-# debe mostrar: Sge-Go  sge-panel  Sge-Deploy
-```
-
-```bash
-# Ir al directorio de trabajo del entorno HA
-cd /opt/sge/Sge-Deploy/docker/ha
-```
-
-> Todos los comandos del manual se ejecutan desde `/opt/sge/Sge-Deploy/docker/ha/`
-> salvo que se indique lo contrario.
 
 ---
 
@@ -741,9 +784,10 @@ Sge-Deploy/docker/ha/
 │   └── init/
 │       └── 01-sge-init.sql    ← bases de datos y extensiones
 └── scripts/
-    ├── 00-setup-lvm.sh        ← crear y montar almacenamiento
+    ├── 00-setup-docker-lvm.sh  ← LVM para Docker en VG del SO (antes de instalar Docker)
+    ├── 00-setup-lvm.sh         ← LVM SGE en VG dedicado vg-ha (bind mounts /srv/ha/)
     ├── 01-setup-replication.sh ← configurar streaming replication
-    └── 02-validate.sh         ← validación completa del entorno
+    └── 02-validate.sh          ← validación completa del entorno
 
 sge-panel/
 ├── Dockerfile.backend         ← imagen Go del panel
