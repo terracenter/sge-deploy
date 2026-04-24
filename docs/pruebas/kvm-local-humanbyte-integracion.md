@@ -84,15 +84,20 @@
 
 ### T-07 — Revocación detectada por phone-home
 **Objetivo:** Revocar licencia en panel y verificar que SGE la detecta.
-**Resultado:** ⏭️ SALTADO
-**Razón:** Phone-home worker deshabilitado — faltan `SGE_INSTALLATION_ID` y `SGE_FINGERPRINT` en docker-compose.yml.
-**Fix pendiente (BUG-02):** Agregar esas dos variables al environment de backend-1 y backend-2 en docker-compose.
+**Resultado:** ⏳ PENDIENTE RE-EJECUCIÓN
+**Pre-requisitos resueltos:** BUG-02 (vars en compose), BUG-03 (fingerprint check), BUG-05 (license.key escrito al activar), volumen sge-ha-etc.
+**Pasos:**
+1. Activar serial con fingerprint correcto (o serial sin fingerprint para dev)
+2. Poner `SGE_INSTALLATION_ID` y `SGE_FINGERPRINT` en `.env` del host
+3. Reiniciar backends → phone-home hace check inicial a los 30s
+4. Revocar instalación desde panel admin
+5. Reiniciar backends de nuevo → phone-home detecta `revoked`
 
 ---
 
 ### T-08 — Expiración detectada por phone-home
 **Objetivo:** Serial con 1 día de vigencia → SGE lo detecta al expirar.
-**Resultado:** ⏭️ SALTADO — mismo motivo que T-07 (phone-home deshabilitado).
+**Resultado:** ⏳ PENDIENTE RE-EJECUCIÓN — mismos pre-requisitos que T-07 resueltos.
 
 ---
 
@@ -159,10 +164,11 @@ SGE ACEPTÓ el serial con fingerprint falso:
 
 | ID | Severidad | Descripción | Estado |
 |----|-----------|-------------|--------|
-| BUG-01 | Media | `AdminSerialRequest` sin JSON tags → request con snake_case falla | Pendiente fix |
-| BUG-02 | Media | `SGE_INSTALLATION_ID` y `SGE_FINGERPRINT` faltantes en docker-compose → phone-home deshabilitado | Pendiente fix |
-| BUG-03 | **Alta** | SGE no verifica que el fingerprint del serial coincida con el hardware real | Pendiente fix |
-| BUG-04 | Baja | Traefik enruta a frontend Next.js cuando panel backend está offline (debería 502/503) | Pendiente fix |
+| BUG-01 | Media | `AdminSerialRequest` sin JSON tags → request con snake_case falla | ✅ Ya tenía tags (verificado 2026-04-24) |
+| BUG-02 | Media | `SGE_INSTALLATION_ID` y `SGE_FINGERPRINT` faltantes en docker-compose → phone-home deshabilitado | ✅ Corregido commit `14f50d9` |
+| BUG-03 | **Alta** | SGE no verifica que el fingerprint del serial coincida con el hardware real | ✅ Corregido commits `19be96a` + `fix: usar SGE_FINGERPRINT env var en Docker` |
+| BUG-04 | Baja | Traefik enruta a frontend Next.js cuando panel backend está offline (debería 502/503) | ✅ Corregido: healthcheck Traefik + regla panel-web excluye /api |
+| BUG-05 | Media | phone-home no encontraba license.key — `ActivateInstallation` no escribía el archivo | ✅ Corregido: service.go ahora escribe `/etc/sge/license.key`; volumen `sge-ha-etc` en compose |
 
 ---
 

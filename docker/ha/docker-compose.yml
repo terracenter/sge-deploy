@@ -201,6 +201,9 @@ services:
         source: ../../../Sge-Go/configs/keys
         target: /app/configs/keys
         read_only: true
+      - type: volume
+        source: sge-etc
+        target: /etc/sge
     networks:
       - sge-ha-network
     depends_on:
@@ -264,6 +267,9 @@ services:
         source: ../../../Sge-Go/configs/keys
         target: /app/configs/keys
         read_only: true
+      - type: volume
+        source: sge-etc
+        target: /etc/sge
     networks:
       - sge-ha-network
     depends_on:
@@ -454,3 +460,10 @@ networks:
   sge-ha-network:
     driver: bridge
     name: sge-ha-network
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Volúmenes nombrados
+# ─────────────────────────────────────────────────────────────────────────────
+volumes:
+  sge-etc:
+    name: sge-ha-etc
