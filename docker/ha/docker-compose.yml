@@ -194,6 +194,8 @@ services:
       JWT_PRIVATE_KEY_PATH: /app/configs/keys/private.pem
       JWT_PUBLIC_KEY_PATH: /app/configs/keys/public.pem
       CORS_ALLOWED_ORIGINS: "https://${SGE_DOMAIN},http://100.69.62.114,http://192.168.122.10"
+      SGE_INSTALLATION_ID: ${SGE_INSTALLATION_ID:-}
+      SGE_FINGERPRINT: ${SGE_FINGERPRINT:-}
     volumes:
       - type: bind
         source: ../../../Sge-Go/configs/keys
@@ -255,6 +257,8 @@ services:
       SGE_PANEL_URL: "http://sge-ha-panel-backend:8090"
       SEED_ADMIN_EMAIL: "admin@sge.local"
       SEED_ADMIN_PASSWORD: "admin123"
+      SGE_INSTALLATION_ID: ${SGE_INSTALLATION_ID:-}
+      SGE_FINGERPRINT: ${SGE_FINGERPRINT:-}
     volumes:
       - type: bind
         source: ../../../Sge-Go/configs/keys
