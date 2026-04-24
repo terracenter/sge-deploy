@@ -361,6 +361,9 @@ services:
       - "traefik.http.routers.panel-api.middlewares=panel-stripprefix"
       - "traefik.http.middlewares.panel-stripprefix.stripprefix.prefixes=/sge-panel"
       - "traefik.http.services.panel-api.loadbalancer.server.port=8090"
+      - "traefik.http.services.panel-api.loadbalancer.healthcheck.path=/readyz"
+      - "traefik.http.services.panel-api.loadbalancer.healthcheck.interval=10s"
+      - "traefik.http.services.panel-api.loadbalancer.healthcheck.timeout=5s"
       - "traefik.http.routers.panel-api-tls.rule=PathPrefix(`/sge-panel/api`)"
       - "traefik.http.routers.panel-api-tls.entrypoints=websecure"
       - "traefik.http.routers.panel-api-tls.tls=true"
@@ -400,11 +403,11 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.panel-web.rule=PathPrefix(`/sge-panel`)"
+      - "traefik.http.routers.panel-web.rule=PathPrefix(`/sge-panel`) && !PathPrefix(`/sge-panel/api`)"
       - "traefik.http.routers.panel-web.entrypoints=web"
       - "traefik.http.routers.panel-web.priority=150"
       - "traefik.http.services.panel-web.loadbalancer.server.port=3002"
-      - "traefik.http.routers.panel-web-tls.rule=PathPrefix(`/sge-panel`)"
+      - "traefik.http.routers.panel-web-tls.rule=PathPrefix(`/sge-panel`) && !PathPrefix(`/sge-panel/api`)"
       - "traefik.http.routers.panel-web-tls.entrypoints=websecure"
       - "traefik.http.routers.panel-web-tls.tls=true"
       - "traefik.http.routers.panel-web-tls.tls.certresolver=${TLS_RESOLVER}"
