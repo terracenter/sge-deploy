@@ -227,6 +227,11 @@ services:
       - "traefik.http.routers.sge-api-tls.priority=200"
       - "traefik.http.routers.sge-api-tls.middlewares=sge-stripprefix"
       - "traefik.http.routers.sge-api-tls.service=sge-api"
+      - "traefik.http.routers.sge-api-v1-tls.rule=PathPrefix(`/api/v1`)"
+      - "traefik.http.routers.sge-api-v1-tls.entrypoints=websecure"
+      - "traefik.http.routers.sge-api-v1-tls.tls=true"
+      - "traefik.http.routers.sge-api-v1-tls.priority=300"
+      - "traefik.http.routers.sge-api-v1-tls.service=sge-api"
     healthcheck:
       test: ["CMD", "sh", "-c", "wget -qO- http://localhost:8000/health/live > /dev/null"]
       interval: 30s
