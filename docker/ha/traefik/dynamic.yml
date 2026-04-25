@@ -1,0 +1,11 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Traefik dynamic config — cert autofirmado para entorno local con IP
+# Cert generado con: openssl req -x509 ... -addext "subjectAltName=IP:..."
+# Archivo en VM: /srv/ha/traefik-certs/custom/{cert,key}.pem
+# ─────────────────────────────────────────────────────────────────────────────
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/traefik/certs/cert.pem
+        keyFile: /etc/traefik/certs/key.pem

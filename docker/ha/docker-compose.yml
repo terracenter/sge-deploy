@@ -193,7 +193,7 @@ services:
       SEED_ADMIN_PASSWORD: "admin123"
       JWT_PRIVATE_KEY_PATH: /app/configs/keys/private.pem
       JWT_PUBLIC_KEY_PATH: /app/configs/keys/public.pem
-      CORS_ALLOWED_ORIGINS: "https://${SGE_DOMAIN},http://100.69.62.114,http://192.168.122.10"
+      CORS_ALLOWED_ORIGINS: "https://${SGE_DOMAIN},https://100.69.62.114,https://192.168.122.10,http://100.69.62.114,http://192.168.122.10"
       SGE_INSTALLATION_ID: ${SGE_INSTALLATION_ID:-}
       SGE_FINGERPRINT: ${SGE_FINGERPRINT:-}
     volumes:
@@ -224,7 +224,6 @@ services:
       - "traefik.http.routers.sge-api-tls.rule=PathPrefix(`/sge/api`)"
       - "traefik.http.routers.sge-api-tls.entrypoints=websecure"
       - "traefik.http.routers.sge-api-tls.tls=true"
-      - "traefik.http.routers.sge-api-tls.tls.certresolver=${TLS_RESOLVER}"
       - "traefik.http.routers.sge-api-tls.priority=200"
       - "traefik.http.routers.sge-api-tls.middlewares=sge-stripprefix"
       - "traefik.http.routers.sge-api-tls.service=sge-api"
@@ -256,7 +255,7 @@ services:
       NATS_URL: nats://nats:4222
       JWT_PRIVATE_KEY_PATH: /app/configs/keys/private.pem
       JWT_PUBLIC_KEY_PATH: /app/configs/keys/public.pem
-      CORS_ALLOWED_ORIGINS: "https://${SGE_DOMAIN},http://100.69.62.114,http://192.168.122.10"
+      CORS_ALLOWED_ORIGINS: "https://${SGE_DOMAIN},https://100.69.62.114,https://192.168.122.10,http://100.69.62.114,http://192.168.122.10"
       SGE_PANEL_URL: "http://sge-ha-panel-backend:8090"
       SEED_ADMIN_EMAIL: "admin@sge.local"
       SEED_ADMIN_PASSWORD: "admin123"
@@ -315,7 +314,6 @@ services:
       - "traefik.http.routers.sge-web-tls.rule=PathPrefix(`/sge`)"
       - "traefik.http.routers.sge-web-tls.entrypoints=websecure"
       - "traefik.http.routers.sge-web-tls.tls=true"
-      - "traefik.http.routers.sge-web-tls.tls.certresolver=${TLS_RESOLVER}"
       - "traefik.http.routers.sge-web-tls.priority=100"
       - "traefik.http.routers.sge-web-tls.service=sge-web"
     healthcheck:
@@ -373,7 +371,6 @@ services:
       - "traefik.http.routers.panel-api-tls.rule=PathPrefix(`/sge-panel/api`)"
       - "traefik.http.routers.panel-api-tls.entrypoints=websecure"
       - "traefik.http.routers.panel-api-tls.tls=true"
-      - "traefik.http.routers.panel-api-tls.tls.certresolver=${TLS_RESOLVER}"
       - "traefik.http.routers.panel-api-tls.priority=200"
       - "traefik.http.routers.panel-api-tls.middlewares=panel-stripprefix"
       - "traefik.http.routers.panel-api-tls.service=panel-api"
@@ -416,7 +413,6 @@ services:
       - "traefik.http.routers.panel-web-tls.rule=PathPrefix(`/sge-panel`) && !PathPrefix(`/sge-panel/api`)"
       - "traefik.http.routers.panel-web-tls.entrypoints=websecure"
       - "traefik.http.routers.panel-web-tls.tls=true"
-      - "traefik.http.routers.panel-web-tls.tls.certresolver=${TLS_RESOLVER}"
       - "traefik.http.routers.panel-web-tls.priority=150"
       - "traefik.http.routers.panel-web-tls.service=panel-web"
     healthcheck:
@@ -442,8 +438,10 @@ services:
       - "8888:8080"   # dashboard — cerrar en firewall cuando no se use
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /srv/ha/traefik-certs:/etc/traefik/acme
+      - /srv/ha/traefik-certs/custom:/etc/traefik/certs:ro
     networks:
       - sge-ha-network
     healthcheck:
