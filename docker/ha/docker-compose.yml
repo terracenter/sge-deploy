@@ -298,6 +298,7 @@ services:
       dockerfile: docker/Dockerfile.frontend
       args:
         NEXT_PUBLIC_BASE_PATH: /sge
+        NEXT_PUBLIC_API_URL: /api/v1
     image: sge-frontend:latest
     container_name: sge-ha-frontend
     environment:
