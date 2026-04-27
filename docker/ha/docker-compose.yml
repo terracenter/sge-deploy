@@ -189,8 +189,6 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       NATS_URL: nats://nats:4222
       SGE_PANEL_URL: "http://sge-ha-panel-backend:8090"
-      SEED_ADMIN_EMAIL: "admin@sge.local"
-      SEED_ADMIN_PASSWORD: "admin123"
       JWT_PRIVATE_KEY_PATH: /app/configs/keys/private.pem
       JWT_PUBLIC_KEY_PATH: /app/configs/keys/public.pem
       CORS_ALLOWED_ORIGINS: "https://${SGE_DOMAIN},https://100.69.62.114,https://192.168.122.10,http://100.69.62.114,http://192.168.122.10"
@@ -262,8 +260,6 @@ services:
       JWT_PUBLIC_KEY_PATH: /app/configs/keys/public.pem
       CORS_ALLOWED_ORIGINS: "https://${SGE_DOMAIN},https://100.69.62.114,https://192.168.122.10,http://100.69.62.114,http://192.168.122.10"
       SGE_PANEL_URL: "http://sge-ha-panel-backend:8090"
-      SEED_ADMIN_EMAIL: "admin@sge.local"
-      SEED_ADMIN_PASSWORD: "admin123"
       SGE_INSTALLATION_ID: ${SGE_INSTALLATION_ID:-}
       SGE_FINGERPRINT: ${SGE_FINGERPRINT:-}
     volumes:
