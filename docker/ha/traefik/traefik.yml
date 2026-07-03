@@ -12,33 +12,42 @@ api:
   insecure: true   # dashboard en :8888
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Entry points — HTTP sin redirect (testing con IP)
+# Entry points
+# web redirige a websecure (HTTP → HTTPS)
 # ─────────────────────────────────────────────────────────────────────────────
 entryPoints:
   web:
     address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
 
   websecure:
     address: ":443"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Proveedores
+# file: cert autofirmado con IP SAN (dynamic.yml)
 # ─────────────────────────────────────────────────────────────────────────────
 providers:
   docker:
     exposedByDefault: false
     network: sge-ha-network
+  file:
+    filename: /etc/traefik/dynamic.yml
+    watch: true
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Certificados TLS
+# letsencrypt: para producción con dominio real
 # ─────────────────────────────────────────────────────────────────────────────
 certificatesResolvers:
-
   letsencrypt:
     acme:
       email: "${ACME_EMAIL}"
       storage: /etc/traefik/acme/acme.json
       httpChallenge:
         entryPoint: web
-
-  selfsigned: {}

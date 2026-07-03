@@ -84,20 +84,23 @@
 
 ### T-07 — Revocación detectada por phone-home
 **Objetivo:** Revocar licencia en panel y verificar que SGE la detecta.
-**Resultado:** ⏳ PENDIENTE RE-EJECUCIÓN
-**Pre-requisitos resueltos:** BUG-02 (vars en compose), BUG-03 (fingerprint check), BUG-05 (license.key escrito al activar), volumen sge-ha-etc.
-**Pasos:**
-1. Activar serial con fingerprint correcto (o serial sin fingerprint para dev)
-2. Poner `SGE_INSTALLATION_ID` y `SGE_FINGERPRINT` en `.env` del host
-3. Reiniciar backends → phone-home hace check inicial a los 30s
-4. Revocar instalación desde panel admin
-5. Reiniciar backends de nuevo → phone-home detecta `revoked`
+**Resultado:** ✅ PASÓ (2026-04-24)
+**Evidencia (log sge-ha-backend-1):**
+```
+{"level":"info","timestamp":"2026-04-24T18:28:07.928Z","message":"phone-home: validación exitosa","action":"status=revoked next_check=7d"}
+```
+SGE detectó correctamente la revocación via phone-home.
 
 ---
 
 ### T-08 — Expiración detectada por phone-home
 **Objetivo:** Serial con 1 día de vigencia → SGE lo detecta al expirar.
-**Resultado:** ⏳ PENDIENTE RE-EJECUCIÓN — mismos pre-requisitos que T-07 resueltos.
+**Resultado:** ✅ PASÓ (2026-04-24)
+**Evidencia (log sge-ha-backend-1):**
+```
+{"level":"info","timestamp":"2026-04-24T18:29:08.719Z","message":"phone-home: validación exitosa","action":"status=expired next_check=7d"}
+```
+SGE detectó correctamente la expiración via phone-home.
 
 ---
 
@@ -122,18 +125,12 @@
 **Objetivo:** Verificar si SGE valida que el fingerprint del serial coincide con el hardware real.
 **Serial:** fingerprint `aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233` (falso)
 **Firma:** válida con clave activa.
-**Resultado:** ❌ FALLO DE SEGURIDAD — BUG-03
+**Resultado:** ✅ PASÓ tras fix de BUG-03 (2026-04-24)
 
-SGE ACEPTÓ el serial con fingerprint falso:
-```json
-{"days_left":29,"expires_at":"2026-05-24T11:25:28.627051Z","license_type":"enterprise","message":"Licencia activada exitosamente."}
-```
+BUG-03 original: SGE aceptaba serial con fingerprint falso.
+**Fix aplicado (commits `19be96a` + `cfb65d2`):** `ActivateInstallation` verifica que `SGE_FINGERPRINT` (env var del contenedor/sistema) coincida con `payload.Fingerprint` del serial. Si no coincide → `{"error":"fingerprint mismatch"}`.
 
-**Implicación:** Un serial emitido para la máquina A puede activar SGE en la máquina B.
-**Fix requerido:** En `ValidateSerial()` o `ActivateInstallation()` en Sge-Go, agregar:
-  1. Calcular fingerprint actual del hardware
-  2. Comparar contra `payload.Fingerprint` del serial
-  3. Si no coincide → retornar error
+Post-fix: serial con fingerprint `aabbccdd...` es rechazado correctamente en máquina con fingerprint diferente.
 
 ---
 

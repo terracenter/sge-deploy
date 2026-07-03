@@ -24,7 +24,7 @@ Internet / LAN
       │                               ├─► pgbouncer → postgres-primary     │
       │    /*    ──► sge-frontend    ─┘                               │    │
       │                                                     postgres-replica│
-      └─── panel-sge.humanbyte.net ──────────────────────────────────┘    │
+      └─── sge-panel.humanbyte.net ──────────────────────────────────┘    │
                 │                                                          │
            /api/* ──► sge-panel-backend ──► postgres-primary (directo)    │
            /*    ──► sge-panel-frontend                                    │
@@ -114,7 +114,7 @@ Apuntar estos dominios a la IP del servidor **antes** de arrancar Traefik:
 
 ```
 sge.humanbyte.net       → <IP_PUBLICA>
-panel-sge.humanbyte.net → <IP_PUBLICA>
+sge-panel.humanbyte.net → <IP_PUBLICA>
 ```
 
 Let's Encrypt requiere que el dominio resuelva correctamente antes de solicitar el
@@ -126,7 +126,7 @@ Agregar al `/etc/hosts` del equipo desde el que se accede:
 
 ```
 <IP_SERVIDOR>   sge.humanbyte.net
-<IP_SERVIDOR>   panel-sge.humanbyte.net
+<IP_SERVIDOR>   sge-panel.humanbyte.net
 ```
 
 Y usar `TLS_RESOLVER=selfsigned` en el `.env` (sección 3).
@@ -634,7 +634,7 @@ Salida esperada:
 | URL | Resultado esperado |
 |-----|-------------------|
 | `https://sge.humanbyte.net` | Pantalla de login SGE |
-| `https://panel-sge.humanbyte.net` | **Pantalla de configuración inicial** (primer arranque) |
+| `https://sge-panel.humanbyte.net` | **Pantalla de configuración inicial** (primer arranque) |
 | `http://localhost:8888` | Dashboard Traefik |
 
 > Con `TLS_RESOLVER=selfsigned`: el navegador muestra advertencia de certificado.
@@ -642,7 +642,7 @@ Salida esperada:
 
 ### Primer acceso al panel (sge-panel)
 
-La primera vez que abres `https://panel-sge.humanbyte.net`, el panel detecta
+La primera vez que abres `https://sge-panel.humanbyte.net`, el panel detecta
 que no hay ningún usuario administrador y muestra la pantalla **"Configuración inicial"**.
 
 1. Ingresa el nombre de usuario (por defecto `admin`)
